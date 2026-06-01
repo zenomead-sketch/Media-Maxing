@@ -1531,7 +1531,7 @@
             <div>
               <span class="status-dot warning" aria-hidden="true"></span>
               <strong>AI suggestions require approval.</strong>
-              <span>Suggestion service comes next</span>
+              <span>Local review only</span>
             </div>
             <div>
               <span class="status-dot blocked" aria-hidden="true"></span>
@@ -1696,11 +1696,40 @@
                   </dl>
 
                   <section class="engagement-suggestion-area" id="engagement-suggestion-area" aria-labelledby="engagement-suggestion-heading">
-                    <div>
+                    <div class="engagement-suggestion-header">
                       <h3 id="engagement-suggestion-heading">Reply suggestion</h3>
-                      <p id="engagement-suggestion-message">AI reply suggestions are not implemented yet. When added, suggestions will require local approval and will never send automatically.</p>
+                      <p id="engagement-suggestion-message">Generate a local AI-assisted draft, review it, and approve it locally. Nothing is sent automatically.</p>
                     </div>
-                    <button class="secondary-button" id="engagement-generate-suggestion" type="button" disabled>Generate AI suggestion</button>
+                    <button class="secondary-button" id="engagement-generate-suggestion" type="button">Generate AI Reply</button>
+                    <div class="engagement-suggestion-empty" id="engagement-suggestion-empty">No local reply suggestion yet.</div>
+                    <div class="engagement-suggestion-content" id="engagement-suggestion-content" hidden>
+                      <label class="field full-width-field">
+                        <span>Suggested reply</span>
+                        <textarea id="engagement-suggestion-text" rows="5" disabled></textarea>
+                      </label>
+                      <dl class="engagement-detail-grid">
+                        <div><dt>Tone</dt><dd id="engagement-suggestion-tone">-</dd></div>
+                        <div><dt>Confidence</dt><dd id="engagement-suggestion-confidence">-</dd></div>
+                        <div><dt>Recommended action</dt><dd id="engagement-suggestion-action">-</dd></div>
+                        <div><dt>Status</dt><dd id="engagement-suggestion-status">-</dd></div>
+                        <div><dt>Generated</dt><dd id="engagement-suggestion-created">-</dd></div>
+                      </dl>
+                      <p><strong>Reason:</strong> <span id="engagement-suggestion-reason">-</span></p>
+                      <div>
+                        <strong>Safety flags</strong>
+                        <ul class="engagement-safety-list" id="engagement-suggestion-safety-flags"></ul>
+                      </div>
+                      <div class="engagement-actions">
+                        <button class="secondary-button" id="engagement-edit-suggestion" type="button">Edit Suggestion</button>
+                        <button class="secondary-button" id="engagement-save-suggestion-edit" type="button" hidden>Save Edit</button>
+                        <button class="primary-button" id="engagement-approve-suggestion" type="button">Approve Locally</button>
+                        <button class="secondary-button" id="engagement-reject-suggestion" type="button">Reject</button>
+                      </div>
+                    </div>
+                    <div>
+                      <strong>Approval history</strong>
+                      <div class="engagement-approval-history" id="engagement-approval-history"></div>
+                    </div>
                   </section>
 
                   <section class="engagement-action-panel" aria-label="Local engagement actions">

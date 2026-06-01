@@ -59,6 +59,6 @@ The command prints safe metadata only. It does not print inbox content, reply te
 ## Limits
 
 - Browser Inbox wiring comes later with the local API bridge.
-- Local approval editing and approval actions are implemented separately.
+- Local approval editing and approval actions are provided by `scripts/services/reply_approvals.py`.
 - Real reply sending is not available.
 - Real platform APIs are not called.

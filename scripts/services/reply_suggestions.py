@@ -368,6 +368,7 @@ def run_reply_safety_review(
     engagement_content: str,
     intent: str,
     suggested_reply: str,
+    include_inbound_request_risks: bool = True,
 ) -> ReplySafetyReview:
     """Run deterministic local checks. No AI or network calls occur here."""
 
@@ -391,7 +392,8 @@ def run_reply_safety_review(
             "critical",
             "Remove any invented scheduling availability before approval.",
         )
-    if re.search(r"\bguarantee(?:d|s)?\b", inbound + "\n" + reply, re.IGNORECASE):
+    guarantee_text = inbound + "\n" + reply if include_inbound_request_risks else reply
+    if re.search(r"\bguarantee(?:d|s)?\b", guarantee_text, re.IGNORECASE):
         add_flag(
             "unsupported_guarantee",
             "critical",

@@ -64,6 +64,21 @@ class WebEngagementScreenTest(unittest.TestCase):
             "engagement-generate-suggestion",
             "engagement-suggestion-area",
             "engagement-suggestion-message",
+            "engagement-suggestion-empty",
+            "engagement-suggestion-content",
+            "engagement-suggestion-text",
+            "engagement-suggestion-tone",
+            "engagement-suggestion-confidence",
+            "engagement-suggestion-action",
+            "engagement-suggestion-status",
+            "engagement-suggestion-created",
+            "engagement-suggestion-reason",
+            "engagement-suggestion-safety-flags",
+            "engagement-edit-suggestion",
+            "engagement-save-suggestion-edit",
+            "engagement-approve-suggestion",
+            "engagement-reject-suggestion",
+            "engagement-approval-history",
             "engagement-action-message",
             "engagement-action-error",
         ]
@@ -86,6 +101,10 @@ class WebEngagementScreenTest(unittest.TestCase):
             "saveEngagementItems",
             "generateMockEngagement",
             "updateEngagementStatus",
+            "generateReplySuggestion",
+            "saveSuggestionEdit",
+            "approveSuggestionLocally",
+            "rejectSuggestion",
             "filteredEngagementItems",
             "renderEngagementSummary",
             "renderEngagementList",
@@ -98,6 +117,8 @@ class WebEngagementScreenTest(unittest.TestCase):
 
         self.assertIn("Temporary browser Engagement adapter", self.script)
         self.assertIn("local-social-ai-manager.engagementItems", self.script)
+        self.assertIn("local-social-ai-manager.replySuggestions", self.script)
+        self.assertIn("local-social-ai-manager.replyApprovals", self.script)
         self.assertIn('source: "mock"', self.script)
         self.assertIn("Replies are not sent automatically.", self.script)
         self.assertIn("approved locally only", self.script)
@@ -115,6 +136,8 @@ class WebEngagementScreenTest(unittest.TestCase):
             ".engagement-detail-grid",
             ".engagement-actions",
             ".engagement-suggestion-area",
+            ".engagement-safety-list",
+            ".engagement-approval-history",
         ):
             with self.subTest(class_name=class_name):
                 self.assertIn(class_name, self.styles)

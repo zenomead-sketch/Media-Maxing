@@ -2510,8 +2510,48 @@ tbody tr:last-child td {
 }
 
 .engagement-suggestion-area {
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+.engagement-suggestion-header,
+.engagement-suggestion-content,
+.engagement-approval-history {
+  display: grid;
+  gap: 10px;
+}
+
+.engagement-suggestion-empty {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.engagement-safety-list {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: #425466;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.engagement-safety-list .blocking {
+  color: #9f2d24;
+}
+
+.engagement-approval-history article {
+  border-left: 3px solid #d8e0e8;
+  padding-left: 10px;
+}
+
+.engagement-approval-history span,
+.engagement-approval-history p {
+  display: block;
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .engagement-action-panel {

@@ -13,6 +13,7 @@ Current scripts:
 - `services/publish_queue.py`: Local-only Publish Queue actions for manual-export completion and mock publishing. It never calls platform APIs.
 - `services/manual_export.py`: Creates local manual posting packages for eligible Publish Queue items. It writes files only and never publishes.
 - `services/reply_suggestions.py`: Creates local-only, review-required reply suggestions and audit records. It never sends replies.
+- `services/reply_approvals.py`: Records local reply review decisions and manual handling. It never sends replies.
 - `jobs/local_runner.py`: Runs local scheduled-post readiness jobs and preflight checks. It updates SQLite only and never publishes.
 
 Job runner examples:

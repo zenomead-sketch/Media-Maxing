@@ -43,7 +43,8 @@ The screen supports:
 - Platform, status, sentiment, intent, priority, source, date-range, and text filters.
 - Local status updates for needs reply, ignored, archived, spam, escalated, and replied manually.
 - A detail panel with local context and notes.
-- A visible placeholder for wiring the local AI reply suggestion service into the browser detail panel.
+- Local mock AI reply suggestions with editable text, tone, confidence, recommended action, reason summary, and visible safety flags.
+- Local approval, rejection, manual-reply tracking, escalation, spam marking, archive actions, and a reply audit history.
 
 Status changes persist in the browser after refresh. They do not update SQLite until a future local API bridge is added.
 
@@ -64,6 +65,5 @@ Reply approval is local approval only. It never sends content to a social platfo
 - Manual engagement entry screen.
 - CSV import parser.
 - Real platform comment/message sync.
-- Browser wiring for the local AI reply suggestion service.
-- Reply approval service.
+- Browser-to-SQLite wiring for reply suggestions and reply approval actions.
 - Real reply sending.

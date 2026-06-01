@@ -8,6 +8,8 @@
 
 (function () {
   const ENGAGEMENT_ITEMS_KEY = "local-social-ai-manager.engagementItems";
+  const REPLY_SUGGESTIONS_KEY = "local-social-ai-manager.replySuggestions";
+  const REPLY_APPROVALS_KEY = "local-social-ai-manager.replyApprovals";
   const SETTINGS_KEY = "local-social-ai-manager.settings";
   const platformIds = ["facebook", "instagram", "threads", "youtube", "tiktok", "linkedin", "x"];
   const engagementStatuses = [
@@ -22,6 +24,7 @@
     "escalated",
   ];
   let selectedEngagementId = null;
+  let editingSuggestionId = null;
 
   function getElement(id) {
     return document.getElementById(id);
@@ -248,6 +251,156 @@
     );
   }
 
+  function normalizeReplySuggestion(suggestion) {
+    const now = new Date().toISOString();
+    return {
+      id: suggestion.id,
+      engagementItemId: suggestion.engagementItemId,
+      suggestedReply: suggestion.suggestedReply || "",
+      tone: suggestion.tone || "helpful",
+      confidence: suggestion.confidence || "high",
+      safetyReview: Array.isArray(suggestion.safetyReview) ? suggestion.safetyReview : [],
+      blockingFlags: Array.isArray(suggestion.blockingFlags) ? suggestion.blockingFlags : [],
+      recommendedAction: suggestion.recommendedAction || "reply",
+      needsHumanReview: suggestion.needsHumanReview !== false,
+      reasonSummary: suggestion.reasonSummary || "Local mock suggestion for owner review.",
+      provider: suggestion.provider || "mock",
+      status: suggestion.status || "generated",
+      createdAt: suggestion.createdAt || now,
+      updatedAt: suggestion.updatedAt || now,
+    };
+  }
+
+  function loadReplySuggestions() {
+    const stored = safeParse(window.localStorage.getItem(REPLY_SUGGESTIONS_KEY), []);
+    return Array.isArray(stored) ? stored.map(normalizeReplySuggestion) : [];
+  }
+
+  function saveReplySuggestions(suggestions) {
+    window.localStorage.setItem(
+      REPLY_SUGGESTIONS_KEY,
+      JSON.stringify(suggestions.map(normalizeReplySuggestion)),
+    );
+  }
+
+  function loadReplyApprovals() {
+    const stored = safeParse(window.localStorage.getItem(REPLY_APPROVALS_KEY), []);
+    return Array.isArray(stored) ? stored : [];
+  }
+
+  function saveReplyApprovals(approvals) {
+    window.localStorage.setItem(REPLY_APPROVALS_KEY, JSON.stringify(approvals));
+  }
+
+  function appendReplyApproval(item, action, previousStatus, newStatus, reason, suggestionId) {
+    const approvals = loadReplyApprovals();
+    approvals.push({
+      id: `browser-reply-approval-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      replySuggestionId: suggestionId || null,
+      engagementItemId: item.id,
+      action,
+      previousStatus,
+      newStatus,
+      reason,
+      actorType: action === "suggest" ? "ai" : "user",
+      createdAt: new Date().toISOString(),
+    });
+    saveReplyApprovals(approvals);
+  }
+
+  function latestSuggestionFor(itemId) {
+    return loadReplySuggestions()
+      .filter((suggestion) => suggestion.engagementItemId === itemId)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0] || null;
+  }
+
+  function browserSafetyReview(item, replyText, includeInboundRequestRisks) {
+    const reply = String(replyText || "");
+    const reviewText = includeInboundRequestRisks ? `${item.content}\n${reply}` : reply;
+    const flags = [];
+    const addFlag = (code, severity, message) => {
+      if (!flags.some((flag) => flag.code === code)) flags.push({ code, severity, message });
+    };
+    if (/\$\s*\d|(?:price|cost|charge)\s+(?:is|will be)\s+\d/i.test(reply)) {
+      addFlag("invented_price", "critical", "Remove any invented price before approval.");
+    }
+    if (/\b(?:available|appointment|scheduled|booked)\s+(?:today|tomorrow|on|for|at)\b/i.test(reply)) {
+      addFlag("invented_availability", "critical", "Remove invented scheduling availability before approval.");
+    }
+    if (/\bguarantee(?:d|s)?\b/i.test(reviewText)) {
+      addFlag("unsupported_guarantee", "critical", "Keep the reply supportable and remove guarantee language.");
+    }
+    if (/\b(?:idiot|stupid|shut up|go away|your fault)\b/i.test(reply)) {
+      addFlag("aggressive_language", "critical", "Use calm, respectful language.");
+    }
+    if (item.intent === "complaint" && reply && !/\b(?:sorry|apolog|understand|thank you for letting us know)\b/i.test(reply)) {
+      addFlag("complaint_mishandled", "critical", "Complaints need an empathetic acknowledgment and human escalation.");
+    }
+    if (item.intent === "spam") {
+      addFlag("spam_no_reply_recommended", "info", "Spam should not receive an outward reply.");
+    }
+    return {
+      flags,
+      blockingFlags: flags.filter((flag) => flag.severity === "critical").map((flag) => flag.code),
+    };
+  }
+
+  function browserMockReply(item) {
+    const tone = "helpful";
+    if (item.intent === "spam") {
+      return { suggestedReply: "", tone, recommendedAction: "mark_spam", reasonSummary: "Spam should not receive an outward reply." };
+    }
+    if (item.intent === "praise") {
+      return { suggestedReply: "Thank you for the kind words. We appreciate you taking the time to share them.", tone: "friendly", recommendedAction: "reply", reasonSummary: "Friendly thank-you draft for owner review." };
+    }
+    if (item.intent === "price_request") {
+      return { suggestedReply: "Thanks for asking. Pricing depends on the project details. Please send us a message and we can help with an estimate.", tone, recommendedAction: "invite_to_message", reasonSummary: "Invites an estimate request without inventing a price." };
+    }
+    if (item.intent === "booking_request") {
+      return { suggestedReply: "Thanks for reaching out. Please send the project details and the best way to contact you so the team can follow up about next steps.", tone, recommendedAction: "ask_for_more_info", reasonSummary: "Requests next-step details without inventing availability." };
+    }
+    if (item.intent === "complaint") {
+      return { suggestedReply: "Thank you for letting us know. We are sorry this was frustrating. Please send us a message so a person can review the details and follow up.", tone: "empathetic", recommendedAction: "escalate", reasonSummary: "Uses an empathetic acknowledgment and routes the complaint to a person." };
+    }
+    if (item.intent === "urgent") {
+      return { suggestedReply: "Thanks for reaching out. Please send the key details and the best contact method so a person can review this promptly.", tone, recommendedAction: "escalate", reasonSummary: "Provides a concise next step while keeping a person in the loop." };
+    }
+    return { suggestedReply: "Thanks for reaching out. Please send us a message and we will be glad to help.", tone, recommendedAction: "reply", reasonSummary: "Helpful general response for owner review." };
+  }
+
+  function generateReplySuggestion() {
+    const items = loadEngagementItems();
+    const item = items.find((entry) => entry.id === selectedEngagementId);
+    if (!item) throw new Error("Select an engagement item before generating a reply.");
+    const draft = browserMockReply(item);
+    const safety = browserSafetyReview(item, draft.suggestedReply, true);
+    const now = new Date().toISOString();
+    const suggestion = normalizeReplySuggestion({
+      ...draft,
+      id: `browser-reply-suggestion-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      engagementItemId: item.id,
+      confidence: "high",
+      safetyReview: safety.flags,
+      blockingFlags: safety.blockingFlags,
+      needsHumanReview: true,
+      provider: "mock",
+      status: "generated",
+      createdAt: now,
+      updatedAt: now,
+    });
+    const suggestions = loadReplySuggestions();
+    suggestions.push(suggestion);
+    saveReplySuggestions(suggestions);
+    const previousStatus = item.status;
+    item.status = "reply_suggested";
+    item.requiresResponse = true;
+    item.updatedAt = now;
+    saveEngagementItems(items);
+    appendReplyApproval(item, "suggest", previousStatus, "reply_suggested", "Local mock AI suggestion generated for owner review only.", suggestion.id);
+    editingSuggestionId = null;
+    return suggestion;
+  }
+
   function generateMockEngagement() {
     if (!mockEngagementAllowed()) {
       throw new Error("Mock engagement is available only in development, demo, or test mode.");
@@ -397,6 +550,122 @@
     setText("engagement-detail-related-post", item.relatedPost);
     setText("engagement-detail-thread", item.threadContext);
     setText("engagement-detail-notes", item.notes);
+    renderReplySuggestion(item);
+  }
+
+  function renderReplySuggestion(item) {
+    const suggestion = latestSuggestionFor(item.id);
+    const empty = getElement("engagement-suggestion-empty");
+    const content = getElement("engagement-suggestion-content");
+    empty.hidden = Boolean(suggestion);
+    content.hidden = !suggestion;
+    renderReplyApprovalHistory(item.id);
+    if (!suggestion) return;
+    const editing = editingSuggestionId === suggestion.id;
+    const text = getElement("engagement-suggestion-text");
+    text.value = suggestion.suggestedReply;
+    text.disabled = !editing;
+    setText("engagement-suggestion-tone", suggestion.tone);
+    setText("engagement-suggestion-confidence", suggestion.confidence);
+    setText("engagement-suggestion-action", formatStatus(suggestion.recommendedAction));
+    setText("engagement-suggestion-status", formatStatus(suggestion.status));
+    setText("engagement-suggestion-created", formatDateTime(suggestion.createdAt));
+    setText("engagement-suggestion-reason", suggestion.reasonSummary);
+    const flagList = getElement("engagement-suggestion-safety-flags");
+    flagList.innerHTML = suggestion.safetyReview.length
+      ? suggestion.safetyReview
+        .map((flag) => `<li class="${flag.severity === "critical" ? "blocking" : ""}"><strong>${escapeHtml(formatStatus(flag.severity))}:</strong> ${escapeHtml(formatStatus(flag.code))} · ${escapeHtml(flag.message)}</li>`)
+        .join("")
+      : "<li>No safety flags. Owner approval is still required.</li>";
+    getElement("engagement-edit-suggestion").hidden = editing;
+    getElement("engagement-save-suggestion-edit").hidden = !editing;
+    getElement("engagement-approve-suggestion").disabled = suggestion.status === "approved";
+    getElement("engagement-reject-suggestion").disabled = suggestion.status === "rejected";
+  }
+
+  function renderReplyApprovalHistory(itemId) {
+    const node = getElement("engagement-approval-history");
+    const approvals = loadReplyApprovals().filter((entry) => entry.engagementItemId === itemId);
+    node.innerHTML = approvals.length
+      ? approvals
+        .map((entry) => `
+          <article>
+            <strong>${escapeHtml(formatStatus(entry.action))}</strong>
+            <span>${escapeHtml(formatStatus(entry.newStatus))} · ${escapeHtml(formatDateTime(entry.createdAt))}</span>
+            <p>${escapeHtml(entry.reason || "Local audit entry.")}</p>
+          </article>
+        `)
+        .join("")
+      : "<p>No local reply actions recorded yet.</p>";
+  }
+
+  function saveSuggestionEdit() {
+    const item = loadEngagementItems().find((entry) => entry.id === selectedEngagementId);
+    const suggestions = loadReplySuggestions();
+    const suggestion = suggestions.find((entry) => entry.id === editingSuggestionId);
+    if (!item || !suggestion) throw new Error("Choose a suggestion before saving an edit.");
+    const nextText = getElement("engagement-suggestion-text").value.trim();
+    if (!nextText && !["ignore", "mark_spam", "escalate"].includes(suggestion.recommendedAction)) {
+      throw new Error("Add reply text before saving this suggestion.");
+    }
+    const safety = browserSafetyReview(item, nextText, false);
+    suggestion.suggestedReply = nextText;
+    suggestion.safetyReview = safety.flags;
+    suggestion.blockingFlags = safety.blockingFlags;
+    suggestion.status = "edited";
+    suggestion.updatedAt = new Date().toISOString();
+    saveReplySuggestions(suggestions);
+    appendReplyApproval(item, "edit", item.status, "reply_suggested", "Owner edited the local reply draft.", suggestion.id);
+    editingSuggestionId = null;
+    return suggestion;
+  }
+
+  function approveSuggestionLocally() {
+    const items = loadEngagementItems();
+    const item = items.find((entry) => entry.id === selectedEngagementId);
+    const suggestions = loadReplySuggestions();
+    const suggestion = suggestions.find((entry) => entry.id === latestSuggestionFor(selectedEngagementId)?.id);
+    if (!item || !suggestion) throw new Error("Generate a local suggestion before approving.");
+    if (item.status === "spam" || item.intent === "spam") {
+      throw new Error("This item is marked spam. Reply approval is not recommended.");
+    }
+    if (suggestion.blockingFlags.length) {
+      throw new Error("This suggestion has critical safety flags. Edit it before approving.");
+    }
+    const safety = browserSafetyReview(item, suggestion.suggestedReply, false);
+    if (safety.blockingFlags.length) {
+      throw new Error("This suggestion has critical safety flags. Edit it before approving.");
+    }
+    const previousStatus = item.status;
+    suggestion.safetyReview = safety.flags;
+    suggestion.blockingFlags = safety.blockingFlags;
+    suggestion.status = "approved";
+    suggestion.updatedAt = new Date().toISOString();
+    item.status = "reply_approved";
+    item.requiresResponse = true;
+    item.updatedAt = suggestion.updatedAt;
+    saveReplySuggestions(suggestions);
+    saveEngagementItems(items);
+    appendReplyApproval(item, "approve", previousStatus, "reply_approved", "Approved locally only. No external reply was sent.", suggestion.id);
+    return suggestion;
+  }
+
+  function rejectSuggestion() {
+    const items = loadEngagementItems();
+    const item = items.find((entry) => entry.id === selectedEngagementId);
+    const suggestions = loadReplySuggestions();
+    const suggestion = suggestions.find((entry) => entry.id === latestSuggestionFor(selectedEngagementId)?.id);
+    if (!item || !suggestion) throw new Error("Generate a local suggestion before rejecting.");
+    const previousStatus = item.status;
+    suggestion.status = "rejected";
+    suggestion.updatedAt = new Date().toISOString();
+    item.status = "needs_reply";
+    item.requiresResponse = true;
+    item.updatedAt = suggestion.updatedAt;
+    saveReplySuggestions(suggestions);
+    saveEngagementItems(items);
+    appendReplyApproval(item, "reject", previousStatus, "needs_reply", "Owner rejected the local reply draft.", suggestion.id);
+    return suggestion;
   }
 
   function setActionMessage(kind, message) {
@@ -410,7 +679,29 @@
 
   function handleStatusAction(status) {
     try {
+      const items = loadEngagementItems();
+      const item = items.find((entry) => entry.id === selectedEngagementId);
+      if (!item) throw new Error("Select an engagement item before recording an action.");
+      const previousStatus = item.status;
       updateEngagementStatus(selectedEngagementId, status);
+      const actionByStatus = {
+        replied_manually: "mark_replied_manually",
+        escalated: "escalate",
+        spam: "mark_spam",
+        archived: "archive",
+      };
+      if (actionByStatus[status]) {
+        appendReplyApproval(
+          item,
+          actionByStatus[status],
+          previousStatus,
+          status,
+          status === "replied_manually"
+            ? "Owner recorded a reply handled outside the app."
+            : `Owner updated the local Inbox status to ${formatStatus(status)}.`,
+          latestSuggestionFor(item.id)?.id,
+        );
+      }
       setActionMessage(
         "success",
         status === "replied_manually"
@@ -469,6 +760,49 @@
     };
     Object.entries(statusActions).forEach(([id, status]) => {
       getElement(id).addEventListener("click", () => handleStatusAction(status));
+    });
+    getElement("engagement-generate-suggestion").addEventListener("click", () => {
+      try {
+        generateReplySuggestion();
+        setActionMessage("success", "Local AI reply suggestion generated. Review and approve it locally before handling any reply outside the app.");
+        renderEngagement();
+      } catch (error) {
+        setActionMessage("error", error.message || "The local reply suggestion could not be generated.");
+      }
+    });
+    getElement("engagement-edit-suggestion").addEventListener("click", () => {
+      const suggestion = latestSuggestionFor(selectedEngagementId);
+      if (!suggestion) return;
+      editingSuggestionId = suggestion.id;
+      renderEngagementDetail();
+      getElement("engagement-suggestion-text").focus();
+    });
+    getElement("engagement-save-suggestion-edit").addEventListener("click", () => {
+      try {
+        saveSuggestionEdit();
+        setActionMessage("success", "Local reply edit saved. Safety review ran again. Nothing was sent.");
+        renderEngagement();
+      } catch (error) {
+        setActionMessage("error", error.message || "The local reply edit could not be saved.");
+      }
+    });
+    getElement("engagement-approve-suggestion").addEventListener("click", () => {
+      try {
+        approveSuggestionLocally();
+        setActionMessage("success", "Reply approved locally only. Nothing was sent automatically.");
+        renderEngagement();
+      } catch (error) {
+        setActionMessage("error", error.message || "The local reply suggestion could not be approved.");
+      }
+    });
+    getElement("engagement-reject-suggestion").addEventListener("click", () => {
+      try {
+        rejectSuggestion();
+        setActionMessage("success", "Local reply suggestion rejected. The Inbox item still needs review.");
+        renderEngagement();
+      } catch (error) {
+        setActionMessage("error", error.message || "The local reply suggestion could not be rejected.");
+      }
     });
     const mockButton = getElement("engagement-generate-mock");
     mockButton.hidden = !mockEngagementAllowed();
