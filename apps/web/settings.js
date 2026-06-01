@@ -3934,22 +3934,28 @@
       saveMediaMetadata();
     });
 
-    importInput.addEventListener("change", () => {
+    importInput.addEventListener("change", async () => {
       const file = importInput.files?.[0];
       if (!file) {
         return;
       }
 
       try {
-        const asset = importedMediaAssetFromFile(file);
-        mediaLibraryAdapter.add(asset);
+        const bridge = activeApiBridge();
+        if (bridge) {
+          await bridge.upload("/api/media/import", file);
+          await bridge.sync();
+        } else {
+          const asset = importedMediaAssetFromFile(file);
+          mediaLibraryAdapter.add(asset);
+        }
         searchInput.value = "";
         typeFilter.value = "all";
         statusFilter.value = "all";
         setMediaError("");
         renderMediaLibrary();
-        // Files are stored only in this browser demo until the web app is wired
-        // to the local media storage service. Nothing is uploaded to the cloud.
+        // Localhost mode copies the file into local app storage. Direct-file
+        // mode remains a browser metadata demo. Nothing uploads to the cloud.
       } catch (error) {
         setMediaError(error.message || "Unsupported file type. Import an image or video file.");
       } finally {

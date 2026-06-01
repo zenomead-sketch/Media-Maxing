@@ -351,10 +351,9 @@ Batch 7 local learning and inbox docs:
 Not built yet:
 
 - Desktop app.
-- Production media upload UI wired to local storage.
 - AI media analysis and auto-tagging.
 - Real social integrations and real OAuth token exchange.
-- Trusted desktop file-picker bridge for production media import.
+- Desktop file-picker hardening for packaged-app media import.
 - Safety Center.
 - Backup and diagnostics.
 - Package-manager based lint/typecheck/build commands.

@@ -48,6 +48,24 @@
     return payload;
   }
 
+  async function upload(path, file) {
+    const response = await window.fetch(apiUrl(path), {
+      method: "POST",
+      headers: {
+        "Content-Type": file.type || "application/octet-stream",
+        "X-Local-Filename": encodeURIComponent(file.name),
+      },
+      body: file,
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      const error = new Error(payload.error || "The local media import failed.");
+      error.errorCodes = payload.errorCodes || [];
+      throw error;
+    }
+    return payload;
+  }
+
   function storeSnapshot(snapshot) {
     Object.entries(storageKeys).forEach(([field, key]) => {
       if (Object.prototype.hasOwnProperty.call(snapshot, field)) {
@@ -79,6 +97,7 @@
     available: false,
     snapshot: null,
     request,
+    upload,
     sync,
     start,
   };

@@ -27,7 +27,7 @@ When the web shell is opened through the localhost bridge, these actions
 persist to SQLite:
 
 - settings and Brand Brain updates
-- media metadata edits
+- media file imports into local app storage and media metadata edits
 - generated previews through the Python content-generation service, including
   active local AI-memory context
 - generated preview saves to Drafts
@@ -52,10 +52,11 @@ In that mode, the browser adapters use `localStorage`. Direct-file mode is
 useful for static UI inspection, but it is not the durable SQLite-backed app
 path.
 
-Media file import remains a browser-demo action for now. The Python media
-storage service already imports local files safely, but the static browser
-shell does not yet have a trusted desktop file-picker bridge that can pass an
-absolute local source path to it.
+Media import through the localhost bridge posts the selected file bytes to a
+loopback-only endpoint. The server validates the filename, type, and size,
+generates a safe internal filename, writes the file under
+`data/media/originals`, and stores metadata in SQLite. Direct-file mode keeps a
+metadata-only browser demo fallback.
 
 ## Safety boundary
 

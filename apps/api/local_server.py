@@ -38,7 +38,9 @@ from scripts.db.drafts import (
 )
 from scripts.db.init_db import REPO_ROOT, initialize_database, resolve_database_path
 from scripts.db.media_storage import (
+    MAX_MEDIA_FILE_SIZE_BYTES,
     get_media_asset,
+    import_media_bytes,
     list_media_assets,
     update_media_asset_metadata,
 )
@@ -685,6 +687,9 @@ class LocalApiRequestHandler(BaseHTTPRequestHandler):
 
     def _handle_api(self, method: str) -> None:
         try:
+            if method == "POST" and urlparse(self.path).path == "/api/media/import":
+                self._handle_media_upload()
+                return
             body = self._read_json_body() if method in {"POST", "PATCH"} else {}
             response = self.server.application.dispatch(method, self.path, body=body)
             self._send_json(response.status, response.body)
@@ -697,6 +702,40 @@ class LocalApiRequestHandler(BaseHTTPRequestHandler):
                     "errorCodes": error.error_codes,
                 },
             )
+
+    def _handle_media_upload(self) -> None:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError as error:
+            raise LocalApiError(
+                "Media upload size is invalid.",
+                error_codes=["invalid_media_upload_size"],
+            ) from error
+        if length <= 0:
+            raise LocalApiError(
+                "Media upload is empty.",
+                error_codes=["empty_media_upload"],
+            )
+        if length > MAX_MEDIA_FILE_SIZE_BYTES:
+            raise LocalApiError(
+                "Media upload is larger than the allowed local limit.",
+                status=HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                error_codes=["media_upload_too_large"],
+            )
+        filename = unquote(self.headers.get("X-Local-Filename", ""))
+        try:
+            asset = import_media_bytes(
+                self.server.application.database_path,
+                filename,
+                self.rfile.read(length),
+            )
+        except Exception as error:
+            raise LocalApiError(
+                str(error) or "Media upload could not be imported.",
+                error_codes=list(getattr(error, "error_codes", []) or [])
+                or ["media_upload_failed"],
+            ) from error
+        self._send_json(HTTPStatus.OK, asset.to_dict())
 
     def _read_json_body(self) -> dict[str, Any]:
         length = int(self.headers.get("Content-Length", "0"))

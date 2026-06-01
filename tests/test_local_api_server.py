@@ -424,6 +424,44 @@ class LocalApiServerTest(unittest.TestCase):
         self.assertIsInstance(health["featureStatus"], str)
         self.assertNotIn("encryptedAccessToken", json.dumps(health))
 
+    def test_http_server_imports_media_bytes_into_local_storage(self):
+        app = self._application()
+        local_data_dir = app.database_path.parent / "local-data"
+        app.dispatch(
+            "PATCH",
+            "/api/settings",
+            body={"localDataDirectory": str(local_data_dir)},
+        )
+        server = LocalApiHttpServer(("127.0.0.1", 0), app)
+        self.addCleanup(server.server_close)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.shutdown)
+        request = Request(
+            f"http://127.0.0.1:{server.server_address[1]}/api/media/import",
+            data=b"\x89PNG\r\n\x1a\nlocal-http-upload",
+            headers={
+                "Content-Type": "image/png",
+                "X-Local-Filename": "Browser%20Upload.png",
+            },
+            method="POST",
+        )
+
+        with urlopen(request, timeout=5) as response:
+            imported = json.loads(response.read().decode("utf-8"))
+        bootstrap = app.dispatch("GET", "/api/bootstrap").body
+
+        self.assertEqual(imported["originalFilename"], "Browser Upload.png")
+        self.assertEqual(imported["mediaType"], "image")
+        self.assertTrue(Path(imported["internalPath"]).exists())
+        self.assertEqual(
+            Path(imported["internalPath"]).parent,
+            local_data_dir / "media" / "originals",
+        )
+        self.assertTrue(
+            any(asset["id"] == imported["id"] for asset in bootstrap["mediaAssets"])
+        )
+
     def test_http_server_refuses_non_loopback_binding(self):
         app = self._application()
 

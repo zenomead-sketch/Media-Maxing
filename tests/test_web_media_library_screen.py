@@ -77,7 +77,8 @@ class WebMediaLibraryScreenTest(unittest.TestCase):
         self.assertIn("image", script)
         self.assertIn("video", script)
         self.assertIn("Unsupported file type", script)
-        self.assertIn("Files are stored only in this browser demo", script)
+        self.assertIn('bridge.upload("/api/media/import", file)', script)
+        self.assertIn("Nothing uploads to the cloud", script)
         self.assertIn("accept=\"image/*,video/*\"", WEB_INDEX.read_text(encoding="utf-8"))
 
 

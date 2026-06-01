@@ -26,6 +26,8 @@ class WebApiBridgeTest(unittest.TestCase):
 
         self.assertLess(bridge_index, settings_index)
         self.assertIn("/api/bootstrap", self.client)
+        self.assertIn("async function upload", self.client)
+        self.assertIn("/api/media/import", self.settings)
         self.assertIn("local-api-ready", self.client)
         self.assertIn("SQLite bridge unavailable; using static local demo adapter.", self.client)
 

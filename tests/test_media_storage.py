@@ -10,6 +10,7 @@ from scripts.db.media_storage import (
     MediaStorageValidationError,
     ensure_media_directories,
     get_media_asset,
+    import_media_bytes,
     import_media_file,
     list_media_assets,
     update_media_asset_metadata,
@@ -92,6 +93,35 @@ class LocalMediaStorageTest(unittest.TestCase):
             self.assertEqual(result.mediaType, "video")
             self.assertEqual(result.mimeType, "video/mp4")
             self.assertTrue(Path(result.internalPath).exists())
+
+    def test_import_media_bytes_copies_loopback_upload_and_rejects_unsafe_filename(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            db_path = root / "app.sqlite"
+            local_data_dir = root / "app-data"
+            initialize_database(db_path)
+
+            result = import_media_bytes(
+                db_path,
+                "Browser Upload.PNG",
+                b"\x89PNG\r\n\x1a\nlocal-browser-upload",
+                local_data_dir=local_data_dir,
+            )
+
+            stored_path = Path(result.internalPath)
+            self.assertEqual(result.originalFilename, "Browser Upload.PNG")
+            self.assertEqual(result.mediaType, "image")
+            self.assertEqual(result.mimeType, "image/png")
+            self.assertTrue(stored_path.exists())
+            self.assertEqual(stored_path.parent, local_data_dir / "media" / "originals")
+
+            with self.assertRaises(MediaStorageValidationError):
+                import_media_bytes(
+                    db_path,
+                    "../unsafe.png",
+                    b"\x89PNG\r\n\x1a\nunsafe",
+                    local_data_dir=local_data_dir,
+                )
 
     def test_import_media_file_rejects_unsupported_files(self):
         with tempfile.TemporaryDirectory() as temp_dir:

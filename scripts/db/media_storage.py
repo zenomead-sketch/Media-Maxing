@@ -370,6 +370,36 @@ def _safe_internal_filename(source_path: Path) -> str:
     return f"{uuid.uuid4().hex}{extension}"
 
 
+def _validate_upload(
+    original_filename: str,
+    content: bytes,
+    max_file_size_bytes: int,
+) -> tuple[str, str, str, int]:
+    if not isinstance(original_filename, str) or not original_filename.strip():
+        raise MediaStorageValidationError("Original media filename is required.")
+    safe_name = Path(original_filename.strip()).name
+    if safe_name != original_filename.strip() or safe_name in {".", ".."}:
+        raise MediaStorageValidationError("Original media filename is unsafe.")
+    if not isinstance(content, bytes):
+        raise MediaStorageValidationError("Uploaded media content must be bytes.")
+    file_size = len(content)
+    if file_size <= 0:
+        raise MediaStorageValidationError("Media file is empty.")
+    if file_size > max_file_size_bytes:
+        raise MediaStorageValidationError(
+            "Media file is larger than the allowed limit "
+            f"of {max_file_size_bytes} bytes."
+        )
+    source_path = Path(safe_name)
+    media_type = _media_type_from_extension(source_path.suffix.lower())
+    mime_type = _detect_mime_type(source_path)
+    if media_type is None or not mime_type.startswith(f"{media_type}/"):
+        raise MediaStorageValidationError(
+            "Unsupported media type. Only image and video files are supported."
+        )
+    return safe_name, media_type, mime_type, file_size
+
+
 def _insert_media_asset(
     database_path: Path,
     *,
@@ -469,6 +499,48 @@ def import_media_file(
             asset_id=str(uuid.uuid4()),
             media_type=media_type,
             original_filename=resolved_source.name,
+            internal_filename=internal_filename,
+            internal_path=destination,
+            mime_type=mime_type,
+            file_size_bytes=file_size,
+        )
+    except Exception:
+        if destination.exists():
+            destination.unlink()
+        raise
+
+
+def import_media_bytes(
+    database_path: str | Path | None,
+    original_filename: str,
+    content: bytes,
+    *,
+    local_data_dir: str | Path | None = None,
+    max_file_size_bytes: int = MAX_MEDIA_FILE_SIZE_BYTES,
+) -> ImportedMediaAsset:
+    db_path = initialize_database(resolve_database_path(database_path))
+    safe_name, media_type, mime_type, file_size = _validate_upload(
+        original_filename,
+        content,
+        max_file_size_bytes,
+    )
+    directories = ensure_media_directories(local_data_dir, db_path)
+    internal_filename = _safe_internal_filename(Path(safe_name))
+    destination = (directories.originalsDirectory / internal_filename).resolve()
+    originals_dir = directories.originalsDirectory.resolve()
+
+    if destination.parent != originals_dir:
+        raise MediaStorageValidationError("Resolved media destination is unsafe.")
+    if destination.exists():
+        raise MediaStorageValidationError("Generated media filename already exists.")
+
+    destination.write_bytes(content)
+    try:
+        return _insert_media_asset(
+            db_path,
+            asset_id=str(uuid.uuid4()),
+            media_type=media_type,
+            original_filename=safe_name,
             internal_filename=internal_filename,
             internal_path=destination,
             mime_type=mime_type,
