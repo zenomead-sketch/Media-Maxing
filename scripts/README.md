@@ -14,6 +14,9 @@ Current scripts:
 - `services/manual_export.py`: Creates local manual posting packages for eligible Publish Queue items. It writes files only and never publishes.
 - `services/reply_suggestions.py`: Creates local-only, review-required reply suggestions and audit records. It never sends replies.
 - `services/reply_approvals.py`: Records local reply review decisions and manual handling. It never sends replies.
+- `services/analytics.py`: Stores manual/mock analytics and computes local summaries and insights.
+- `services/ai_memory.py`: Refreshes evidence-backed local learning memory without external calls.
+- `services/weekly_reports.py`: Generates deterministic local weekly reports without external calls.
 - `jobs/local_runner.py`: Runs local scheduled-post readiness jobs and preflight checks. It updates SQLite only and never publishes.
 
 Job runner examples:
@@ -33,4 +36,11 @@ Reply suggestion example:
 
 ```powershell
 python -m scripts.services.reply_suggestions --database data/app.sqlite --engagement-item-id ENGAGEMENT_ITEM_ID
+```
+
+Learning refresh and weekly report examples:
+
+```powershell
+python -m scripts.services.ai_memory --database data/app.sqlite --brand-profile-id demo-brand-brightside-exterior-care
+python -m scripts.services.weekly_reports --database data/app.sqlite --brand-profile-id demo-brand-brightside-exterior-care --week-start-date 2026-06-08
 ```

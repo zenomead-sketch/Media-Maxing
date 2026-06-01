@@ -99,6 +99,8 @@ Confidence guidance:
 
 The app should not delete memory automatically. A user should be able to review, dismiss, archive, or supersede a learning record later.
 
+`scripts/services/ai_memory.py` now promotes explainable insights and local review decisions into idempotent, evidence-backed memory. `scripts/services/weekly_reports.py` creates one deterministic local report per brand and week. See `docs/ai-learning-loop.md` and `docs/weekly-reports.md`.
+
 ## Demo Data
 
 The seed script creates one clearly fake `mock` snapshot, one aggregate performance row, one mock import audit, one low-confidence content insight, one low-confidence AI memory record, and one `ai_mock` weekly report.
@@ -115,7 +117,6 @@ python -m scripts.db.seed_demo --database data/app.sqlite
 - CSV import parser.
 - Browser-to-SQLite API bridge for the Analytics screen.
 - AI-provider insight generation.
-- Weekly report generator.
 - Real platform analytics sync.
 
 Real analytics APIs remain future work behind explicit integration safety gates.

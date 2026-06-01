@@ -796,6 +796,7 @@ Stores local weekly summaries for later reporting screens.
 - Mock reports must use `generated_by = ai_mock`.
 - Reports should distinguish fake demo metrics, manual metrics, and future API metrics.
 - Reports are local summaries and should not include unnecessary private customer details.
+- `scripts/services/weekly_reports.py` upserts one deterministic report per brand and week.
 
 ## approval_logs
 
@@ -862,6 +863,7 @@ Stores learning records from approvals, rejections, analytics, engagement, media
 - Be honest when data is weak.
 - AI memory should not convert weak patterns into unsupported claims.
 - Demo memory must be clearly labeled with `source = mock`.
+- `scripts/services/ai_memory.py` stores evidence IDs and counts instead of private engagement text.
 
 ## app_settings
 

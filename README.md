@@ -145,6 +145,8 @@ python -m scripts.services.manual_export --database data/app.sqlite --queue-item
 python -m scripts.services.analytics --database data/app.sqlite
 python -m scripts.services.analytics --database data/app.sqlite --generate-mock
 python -m scripts.services.engagement --database data/app.sqlite --brand-profile-id demo-brand-brightside-exterior-care --ingest-mock
+python -m scripts.services.ai_memory --database data/app.sqlite --brand-profile-id demo-brand-brightside-exterior-care
+python -m scripts.services.weekly_reports --database data/app.sqlite --brand-profile-id demo-brand-brightside-exterior-care --week-start-date 2026-06-08
 python -m unittest tests.test_integration_flags
 python -m unittest tests.test_platform_http_client
 python -m unittest tests.test_integration_setup_service
@@ -288,6 +290,8 @@ Current status:
 - Local AI reply suggestions now use Brand Brain context, versioned prompt provenance, deterministic mock generation, local safety review, persisted history, and audit rows. Suggestions remain review-only and are never sent externally.
 - Local reply approval workflow now supports editing, local approval, rejection, manual-reply tracking, escalation, spam marking, archive actions, critical-flag blocking, and audit history. Approval never sends a platform reply.
 - Engagement Inbox browser screen now mirrors the local reply workflow with clearly labeled mock data. SQLite wiring remains a later API-bridge step.
+- Local AI memory service now promotes explainable analytics insights and local draft/reply review decisions into idempotent evidence-backed memory without storing private engagement text.
+- Local weekly report service now upserts one deterministic report per brand and week, preserving mock/manual provenance and labeling mock-only reports as `ai_mock`.
 
 Batch 4 docs:
 
@@ -324,6 +328,8 @@ Batch 7 local learning and inbox docs:
 - `docs/engagement-inbox.md`
 - `docs/reply-suggestions.md`
 - `docs/reply-approval-workflow.md`
+- `docs/ai-learning-loop.md`
+- `docs/weekly-reports.md`
 
 Not built yet:
 
@@ -334,9 +340,7 @@ Not built yet:
 - AI media analysis and auto-tagging.
 - Browser-to-SQLite API bridge for Scheduling, Calendar, Publish Queue, and Manual Export.
 - Real social integrations and real OAuth token exchange.
-- Analytics dashboard UI.
-- Engagement inbox.
-- AI memory.
+- Browser-to-SQLite API bridge for Analytics, Engagement, AI Memory, and Weekly Reports.
 - Safety Center.
 - Backup and diagnostics.
 - Package-manager based lint/typecheck/build commands.

@@ -19,6 +19,8 @@ This keeps the database local-first and runnable without installing dependencies
 - `scripts/db/seed_demo.py`: Adds safe fake demo records for local development.
 - `scripts/db/analytics_models.py`: Defines analytics, insight, report, and AI memory constants.
 - `scripts/services/analytics.py`: Stores manual and mock analytics, computes local summaries, and creates rule-based insights.
+- `scripts/services/ai_memory.py`: Refreshes conservative local memory from analytics and approval evidence.
+- `scripts/services/weekly_reports.py`: Generates deterministic local weekly summaries with source provenance.
 - `scripts/db/engagement_models.py`: Defines engagement, thread, reply suggestion, approval, and import constants.
 - `scripts/services/engagement.py`: Creates idempotent fake local inbox records without fetching or replying.
 - `scripts/services/reply_suggestions.py`: Generates review-required local reply drafts with deterministic safety checks and no external sending.
@@ -32,6 +34,8 @@ This keeps the database local-first and runnable without installing dependencies
 - `tests/test_brand_profiles.py`: Verifies Brand Brain create, read, update, list, validation, and seed compatibility.
 - `tests/test_media_storage.py`: Verifies media directory creation, local image/video import, metadata persistence, and rejection of unsafe files.
 - `tests/test_analytics_service.py`: Verifies manual metrics, mock metrics, latest-snapshot aggregation, summaries, insights, and import audits.
+- `tests/test_ai_memory_service.py`: Verifies evidence-backed memory refresh, provenance, privacy, archiving, and idempotency.
+- `tests/test_weekly_reports_service.py`: Verifies local report generation, mock labeling, empty weeks, and idempotency.
 - `tests/test_engagement_service.py`: Verifies safe mock inbox ingestion and duplicate skipping.
 - `tests/test_reply_suggestion_service.py`: Verifies local reply drafting, safety review, audit history, rollback, and safe CLI output.
 - `tests/test_reply_approval_service.py`: Verifies local approval decisions, critical-flag blocking, safe edits, and reply audit history.
