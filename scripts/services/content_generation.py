@@ -3,7 +3,7 @@
 The :class:`ContentGenerationService` wires:
 
 1. :class:`scripts.ai.schemas.ContentGenerationInput` validation.
-2. Optional brand-profile / media-asset / settings loaders.
+2. Optional brand-profile / media-asset / settings / AI-memory loaders.
 3. Prompt rendering via :mod:`scripts.ai.prompts`.
 4. Provider lookup via :mod:`scripts.ai.providers.registry` (mock by default).
 5. Bundle schema validation (handled by the dataclasses).
@@ -52,6 +52,7 @@ class SettingsSnapshot:
 BrandProfileLoader = Callable[[str], Optional[dict[str, Any]]]
 MediaAssetLoader = Callable[[list[str]], list[dict[str, Any]]]
 SettingsLoader = Callable[[], Optional[SettingsSnapshot]]
+MemoryLoader = Callable[[str], list[dict[str, Any]]]
 
 
 @dataclass
@@ -60,6 +61,7 @@ class ContentGenerationService:
     brand_loader: Optional[BrandProfileLoader] = None
     media_loader: Optional[MediaAssetLoader] = None
     settings_loader: Optional[SettingsLoader] = None
+    memory_loader: Optional[MemoryLoader] = None
     safety_check_runner: Callable[..., tuple[list[str], list[str], list[str]]] = field(
         default=run_safety_checks
     )
@@ -75,6 +77,11 @@ class ContentGenerationService:
 
         resolved_brand = self._resolve_brand_profile(input)
         resolved_media = self._resolve_media_assets(input)
+        active_memory = self._resolve_active_memory(input.brand_profile_id())
+        resolved_brand = {
+            **resolved_brand,
+            "activeAIMemory": active_memory,
+        }
         settings = self._load_settings()
         emergency_pause = bool(getattr(settings, "emergency_pause_enabled", False))
 
@@ -113,6 +120,7 @@ class ContentGenerationService:
             rendered_prompt=rendered_prompt,
             prompt_template_id=prompt_template.id,
             prompt_template_version=prompt_template.version,
+            active_memory=active_memory,
         )
 
         return bundle
@@ -200,6 +208,32 @@ class ContentGenerationService:
             )
         return snapshot
 
+    def _resolve_active_memory(self, brand_profile_id: str) -> list[dict[str, str]]:
+        if self.memory_loader is None:
+            return []
+        memories = self.memory_loader(brand_profile_id)
+        if not isinstance(memories, list):
+            raise ContentGenerationError("memory_loader must return a list of dicts.")
+        summaries: list[dict[str, str]] = []
+        for memory in memories[:8]:
+            if not isinstance(memory, dict):
+                raise ContentGenerationError("memory_loader entries must be dicts.")
+            summary = str(memory.get("summary") or memory.get("content") or "").strip()
+            if not summary:
+                continue
+            summaries.append(
+                {
+                    "memoryType": str(
+                        memory.get("memoryType") or memory.get("memory_type") or "local_learning"
+                    ),
+                    "title": str(memory.get("title") or "Local learning").strip(),
+                    "summary": summary[:240],
+                    "confidence": str(memory.get("confidence") or "low"),
+                    "source": str(memory.get("source") or "local_learning"),
+                }
+            )
+        return summaries
+
     def _load_prompt(self, prompt_id: str):
         try:
             return get_prompt(prompt_id)
@@ -255,6 +289,7 @@ class ContentGenerationService:
             "content_goal": input.content_goal,
             "content_angle": input.content_angle,
             "media_notes": media_notes,
+            "ai_memory": brand.get("activeAIMemory") or [],
             "user_instructions": input.user_instructions,
             "requested_platforms": list(input.selected_platforms),
         }
@@ -272,6 +307,7 @@ class ContentGenerationService:
         rendered_prompt: str,
         prompt_template_id: str,
         prompt_template_version: str,
+        active_memory: list[dict[str, str]],
     ) -> None:
         all_flags: list[str] = []
         all_blocking: list[str] = []
@@ -308,6 +344,8 @@ class ContentGenerationService:
                 "rendered_prompt_chars": len(rendered_prompt),
                 "rendered_prompt_template_id": prompt_template_id,
                 "rendered_prompt_version": prompt_template_version,
+                "active_ai_memory_count": len(active_memory),
+                "active_ai_memory": active_memory,
             }
         )
 

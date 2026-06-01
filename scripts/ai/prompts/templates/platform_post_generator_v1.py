@@ -22,6 +22,7 @@ Service locations: {{ locations }}
 Content goal: {{ content_goal }}
 Content angle: {{ content_angle }}
 Media metadata: {{ media_notes }}
+Active local AI memory: {{ ai_memory }}
 User instructions: {{ user_instructions }}
 
 INPUTS
@@ -161,6 +162,16 @@ TEMPLATE = PromptTemplate(
             required=False,
             type_hint="list",
             example="[id: media-driveway-before, stage: before, service: pressure washing]",
+        ),
+        PromptInputSpec(
+            name="ai_memory",
+            description=(
+                "Bounded, evidence-backed local learning summaries. Treat these as guidance, "
+                "not as new business claims."
+            ),
+            required=False,
+            type_hint="list",
+            example="[approved strategy: owners prefer practical educational posts]",
         ),
         PromptInputSpec(
             name="user_instructions",

@@ -2,8 +2,8 @@
 
 `ContentGenerationService` is the orchestration layer that turns a
 `ContentGenerationInput` into a validated `GeneratedContentBundle`. It
-wires the brand profile, media metadata, prompt registry, AI provider,
-and local safety review into one call. Mock is the default provider so
+wires the brand profile, media metadata, active local AI memory, prompt
+registry, AI provider, and local safety review into one call. Mock is the default provider so
 the service runs end-to-end without any API keys.
 
 The generation service:
@@ -11,7 +11,7 @@ The generation service:
 - does not persist drafts
 - does not call the network
 - does not depend on UI components
-- is safe to invoke from tests or from a future API route
+- is safe to invoke from tests or from the localhost API bridge
 
 Draft persistence is handled by `scripts/db/drafts.py`. That service
 takes a validated `GeneratedContentBundle`, saves selected platform
@@ -45,28 +45,32 @@ per saved draft.
 3. **Resolve media assets.** If every selected asset is `{"id": "..."}`
    and a `media_loader` is configured, the loader fetches the full
    metadata list. Otherwise the input list is used as-is.
-4. **Load settings (optional).** If a `settings_loader` is configured,
+4. **Load active AI memory (optional).** If a `memory_loader` is configured,
+   the service includes up to eight bounded evidence-backed local learning
+   summaries in the prompt context and records them in prompt metadata. It
+   does not include raw engagement content.
+5. **Load settings (optional).** If a `settings_loader` is configured,
    the service reads `emergency_pause_enabled`. The service accepts
    any object with that attribute or the camelCase `emergencyPauseEnabled`.
-5. **Render prompt.** `get_prompt(options.prompt_id)` loads the prompt
+6. **Render prompt.** `get_prompt(options.prompt_id)` loads the prompt
    template (default `platform_post_generator_v1`) and renders it with
    variables built from the resolved brand, media, and input. The
    rendered prompt is not sent to the mock provider (mock is
    deterministic without it) but its length, template id, and version
    are recorded in `bundle.prompt_metadata` for traceability.
-6. **Call provider.** `get_provider(options.provider_name)` returns the
+7. **Call provider.** `get_provider(options.provider_name)` returns the
    adapter. Mock is default; real adapters raise
    `ProviderDisabledError` until enabled in a later batch, which the
    service surfaces as `ContentGenerationError`.
-7. **Schema validation.** `GeneratedContentBundle.__post_init__`
+8. **Schema validation.** `GeneratedContentBundle.__post_init__`
    validates structure as soon as the provider returns.
-8. **Safety review.** `run_safety_checks(caption, brand_profile,
+9. **Safety review.** `run_safety_checks(caption, brand_profile,
    emergency_pause_enabled=...)` runs on each post's caption.
    Per-post `safety_flags` are populated, and a bundle-level
    `GeneratedPostSafetyReview` is constructed with the deduped union
    of flags, blocking flags, and suggested fixes. `blocking_flags ⊆
    flags` always holds.
-9. **Return bundle.** No persistence in this step.
+10. **Return bundle.** No persistence in this step.
 
 ## Safety flag categories produced by the local checker
 
@@ -150,6 +154,23 @@ service = ContentGenerationService(
 The service does not call the loaders unnecessarily: if the input
 already includes a complete brand profile or fully-detailed media
 assets, the loader is skipped.
+
+## Browser generation through localhost
+
+When the static web shell is served by `apps.api.local_server`, the Generate
+screen posts its input to:
+
+```text
+POST /api/content-generation
+```
+
+The local route loads the Brand Brain profile, selected media metadata, app
+settings, and active AI memory from SQLite. It returns a validated mock bundle
+with prompt provenance and a one-time save request ID. Clicking Save to Drafts
+remains a separate explicit action.
+
+Opening `apps/web/index.html` directly keeps a deterministic browser mirror as
+a non-durable demo fallback.
 
 ## Saving generated drafts locally
 

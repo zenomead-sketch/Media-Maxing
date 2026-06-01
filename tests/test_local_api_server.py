@@ -203,6 +203,40 @@ class LocalApiServerTest(unittest.TestCase):
                 body={"bundle": bundle, "save_request_id": "local-api-save-once"},
             )
 
+    def test_content_generation_uses_sqlite_brand_media_and_active_memory(self):
+        app = self._application()
+
+        bundle = app.dispatch(
+            "POST",
+            "/api/content-generation",
+            body={
+                "input": {
+                    "brandProfileId": DEMO_BRAND_ID,
+                    "contentGoal": "show_transformation",
+                    "contentAngle": "before_after",
+                    "selectedPlatforms": ["instagram", "facebook"],
+                    "selectedMediaIds": ["demo-media-driveway-before"],
+                    "userInstructions": "Keep the message practical.",
+                }
+            },
+        ).body
+
+        self.assertEqual(bundle["generationProvider"], "mock")
+        self.assertEqual(
+            [post["platform"] for post in bundle["posts"]],
+            ["instagram", "facebook"],
+        )
+        self.assertTrue(bundle["saveRequestId"].startswith("generation-"))
+        self.assertGreaterEqual(bundle["promptMetadata"]["activeAiMemoryCount"], 1)
+        self.assertEqual(
+            bundle["promptMetadata"]["renderedPromptTemplateId"],
+            "platform_post_generator_v1",
+        )
+        self.assertEqual(
+            bundle["posts"][0]["mediaAssetIds"],
+            ["demo-media-driveway-before"],
+        )
+
     def test_draft_calendar_queue_and_media_actions_persist(self):
         app = self._application()
 

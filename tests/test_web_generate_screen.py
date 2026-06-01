@@ -82,8 +82,9 @@ class WebGenerateScreenTest(unittest.TestCase):
             with self.subTest(angle=option_value):
                 self.assertIn(f'value="{option_value}"', self.html)
 
-    def test_browser_preview_and_sqlite_save_boundary_are_visible(self):
-        self.assertIn("Preview generation uses a deterministic browser mock", self.html)
+    def test_local_generation_bridge_and_direct_file_fallback_are_visible(self):
+        self.assertIn("Preview generation uses the localhost Python service", self.html)
+        self.assertIn("/api/content-generation", self.script)
         self.assertIn("/api/drafts/save-generated", self.script)
         self.assertIn("localStorage", self.script)
         self.assertIn("local-social-ai-manager.drafts", self.script)

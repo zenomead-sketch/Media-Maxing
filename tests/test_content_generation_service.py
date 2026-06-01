@@ -144,6 +144,27 @@ class HappyPathTest(unittest.TestCase):
         self.assertEqual(bundle.prompt_metadata.get("rendered_prompt_version"), "v1")
         self.assertGreater(bundle.prompt_metadata.get("rendered_prompt_chars", 0), 0)
 
+    def test_active_ai_memory_is_bounded_and_recorded_in_prompt_metadata(self):
+        memories = [
+            {
+                "memoryType": "content_preference",
+                "title": f"Preference {index}",
+                "summary": "Use practical educational posts backed by local evidence.",
+                "confidence": "medium",
+                "source": "local_learning",
+            }
+            for index in range(10)
+        ]
+        bundle = ContentGenerationService(
+            memory_loader=lambda brand_id: memories,
+        ).generate(_input())
+
+        context = bundle.prompt_metadata["active_ai_memory"]
+        self.assertEqual(len(context), 8)
+        self.assertEqual(bundle.prompt_metadata["active_ai_memory_count"], 8)
+        self.assertEqual(context[0]["memoryType"], "content_preference")
+        self.assertNotIn("private engagement", str(context).lower())
+
 
 # ---------------------------------------------------------------------------
 # Scenario 2: Multi-platform generation.

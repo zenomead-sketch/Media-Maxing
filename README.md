@@ -307,6 +307,7 @@ Current status:
 - Engagement Inbox browser screen persists the local reply workflow through the localhost SQLite bridge and keeps a direct-file `localStorage` fallback for static inspection.
 - Local AI memory service now promotes explainable analytics insights and local draft/reply review decisions into idempotent evidence-backed memory without storing private engagement text.
 - Local weekly report service now upserts one deterministic report per brand and week, preserving mock/manual provenance and labeling mock-only reports as `ai_mock`.
+- The localhost Generate screen now runs through the Python content-generation service, loading Brand Brain, selected media metadata, app settings, and bounded active AI-memory summaries from SQLite before the user explicitly saves drafts.
 
 Batch 4 docs:
 

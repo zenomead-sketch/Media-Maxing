@@ -28,6 +28,8 @@ persist to SQLite:
 
 - settings and Brand Brain updates
 - media metadata edits
+- generated previews through the Python content-generation service, including
+  active local AI-memory context
 - generated preview saves to Drafts
 - draft edits, approval actions, and scheduling
 - Calendar reschedule, cancel, notes, and needs-attention actions

@@ -31,6 +31,18 @@ Every memory includes:
 
 Mock analytics produce `source = mock` memory. A mock-derived memory must stay visibly mock throughout the loop.
 
+## Generation Context
+
+When the Generate screen runs through the localhost bridge, the content
+generation service loads up to eight active memory records for the selected
+brand. It passes bounded title, summary, confidence, type, and source fields
+into the prompt context and records the same safe summaries in prompt
+metadata.
+
+Raw engagement content is not added to the prompt through this loop. Memory is
+guidance, not a new business claim, and generated drafts still require owner
+review.
+
 ## Conservative Behavior
 
 The learning loop does not:
@@ -55,4 +67,4 @@ The command prints the refreshed records and explicit `external_ai_calls=false` 
 
 ## Future UI Work
 
-A later UI can let the owner review, archive, and supersede memory records. The current service layer is ready for that screen and for future prompt context selection.
+A later UI can let the owner review, archive, and supersede memory records.

@@ -4,8 +4,10 @@ import argparse
 import json
 import mimetypes
 import sqlite3
+import uuid
 from contextlib import closing
 from dataclasses import asdict, dataclass, is_dataclass
+from datetime import datetime, timezone
 from enum import Enum
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -16,6 +18,8 @@ from urllib.parse import parse_qs, unquote, urlparse
 from apps.api import connect_handlers
 from scripts.ai.schemas import (
     CaptionVariant,
+    ContentGenerationInput,
+    ContentGenerationOptions,
     GeneratedContentBundle,
     GeneratedPostSafetyReview,
     GeneratedPostScore,
@@ -33,11 +37,16 @@ from scripts.db.drafts import (
     update_generated_draft,
 )
 from scripts.db.init_db import REPO_ROOT, initialize_database, resolve_database_path
-from scripts.db.media_storage import list_media_assets, update_media_asset_metadata
+from scripts.db.media_storage import (
+    get_media_asset,
+    list_media_assets,
+    update_media_asset_metadata,
+)
 from scripts.db.settings import load_app_settings, update_app_settings
 from scripts.services.ai_memory import AIMemoryService
 from scripts.services.analytics import AnalyticsService
 from scripts.services.approval_queue import ApprovalQueueService
+from scripts.services.content_generation import ContentGenerationService
 from scripts.services.engagement import EngagementService
 from scripts.services.integration_setup import validate_social_integration_setup
 from scripts.services.local_env import load_local_env_file
@@ -157,6 +166,8 @@ class LocalApiApplication:
                 segments[2],
                 body,
             ).to_dict()
+        if segments == ["api", "content-generation"] and method == "POST":
+            return self._generate_content(body)
         if segments == ["api", "drafts"] and method == "GET":
             return [draft.to_dict() for draft in list_generated_drafts(self.database_path)]
         if segments == ["api", "drafts", "save-generated"] and method == "POST":
@@ -328,6 +339,49 @@ class LocalApiApplication:
             status=HTTPStatus.NOT_FOUND,
             error_codes=["route_not_found"],
         )
+
+    def _generate_content(self, body: dict[str, Any]) -> dict[str, Any]:
+        request = _object(body.get("input"))
+        options = _object(body.get("options"))
+
+        def load_brand(profile_id: str) -> dict[str, Any] | None:
+            profile = get_brand_profile(self.database_path, profile_id)
+            return asdict(profile) if profile else None
+
+        def load_media(media_ids: list[str]) -> list[dict[str, Any]]:
+            assets: list[dict[str, Any]] = []
+            for media_id in media_ids:
+                asset = get_media_asset(self.database_path, media_id)
+                if asset is None:
+                    raise LocalApiError(
+                        f"Media asset {media_id!r} was not found.",
+                        error_codes=["media_asset_not_found"],
+                    )
+                assets.append(asset.to_dict())
+            return assets
+
+        def load_memory(profile_id: str) -> list[dict[str, Any]]:
+            return [
+                asdict(memory)
+                for memory in AIMemoryService(self.database_path).list_memories(
+                    brand_profile_id=profile_id,
+                    status="active",
+                )
+            ]
+
+        bundle = ContentGenerationService(
+            brand_loader=load_brand,
+            media_loader=load_media,
+            settings_loader=lambda: load_app_settings(self.database_path),
+            memory_loader=load_memory,
+        ).generate(
+            _content_generation_input_from_payload(request),
+            _content_generation_options_from_payload(options or request),
+        )
+        bundle.created_at = _now_utc()
+        response = _camelize_keys(bundle.to_dict())
+        response["saveRequestId"] = f"generation-{uuid.uuid4()}"
+        return response
 
     def _dispatch_connector(
         self,
@@ -708,6 +762,81 @@ def _analytics_filters(query: dict[str, str]) -> dict[str, Any]:
     }
 
 
+def _content_generation_input_from_payload(payload: dict[str, Any]) -> ContentGenerationInput:
+    media_assets = _value_alias(payload, "selectedMediaAssets", "selected_media_assets")
+    if media_assets is None:
+        media_assets = [
+            {"id": media_id}
+            for media_id in _string_list(
+                _value_alias(payload, "selectedMediaIds", "selected_media_ids")
+            )
+        ]
+    return ContentGenerationInput(
+        brand_profile={
+            "id": _required_alias(payload, "brandProfileId", "brand_profile_id"),
+        },
+        content_goal=_required_alias(payload, "contentGoal", "content_goal"),
+        content_angle=_required_alias(payload, "contentAngle", "content_angle"),
+        selected_platforms=_value_alias(
+            payload,
+            "selectedPlatforms",
+            "selected_platforms",
+            default=[],
+        ),
+        selected_media_assets=media_assets,
+        campaign_name=_value_alias(payload, "campaignName", "campaign_name"),
+        target_audience=_value_alias(payload, "targetAudience", "target_audience"),
+        location_context=_value_alias(payload, "locationContext", "location_context"),
+        offer_context=_value_alias(payload, "offerContext", "offer_context"),
+        user_instructions=_value_alias(payload, "userInstructions", "user_instructions"),
+        content_idea_id=_value_alias(payload, "contentIdeaId", "content_idea_id"),
+    )
+
+
+def _content_generation_options_from_payload(payload: dict[str, Any]) -> ContentGenerationOptions:
+    return ContentGenerationOptions(
+        provider_name=_value_alias(payload, "providerName", "provider_name", default="mock"),
+        prompt_id=_value_alias(
+            payload,
+            "promptId",
+            "prompt_id",
+            default="platform_post_generator_v1",
+        ),
+        number_of_variants=_value_alias(
+            payload,
+            "numberOfVariants",
+            "number_of_variants",
+            default=0,
+        ),
+        include_hashtags=_value_alias(
+            payload,
+            "includeHashtags",
+            "include_hashtags",
+            default=True,
+        ),
+        include_emojis=_value_alias(
+            payload,
+            "includeEmojis",
+            "include_emojis",
+            default=False,
+        ),
+        include_cta=_value_alias(payload, "includeCTA", "include_cta", default=True),
+        tone=_value_alias(payload, "tone"),
+        creativity_level=_value_alias(
+            payload,
+            "creativityLevel",
+            "creativity_level",
+            default="medium",
+        ),
+        require_safety_review=_value_alias(
+            payload,
+            "requireSafetyReview",
+            "require_safety_review",
+            default=True,
+        ),
+    )
+
+
 def _generated_bundle_from_payload(payload: Any) -> GeneratedContentBundle:
     if not isinstance(payload, dict):
         raise LocalApiError(
@@ -819,6 +948,13 @@ def _required_alias(values: dict[str, Any], *field_names: str) -> Any:
     )
 
 
+def _value_alias(values: dict[str, Any], *field_names: str, default: Any = None) -> Any:
+    for field_name in field_names:
+        if field_name in values:
+            return values[field_name]
+    return default
+
+
 def _object(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
@@ -859,6 +995,28 @@ def _json_safe(value: Any) -> Any:
     if isinstance(value, Path):
         return str(value)
     return value
+
+
+def _camelize_keys(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            _camelize_key(str(key)): _camelize_keys(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_camelize_keys(item) for item in value]
+    return value
+
+
+def _camelize_key(value: str) -> str:
+    head, *tail = value.split("_")
+    return head + "".join(part[:1].upper() + part[1:] for part in tail)
+
+
+def _now_utc() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace(
+        "+00:00", "Z"
+    )
 
 
 def main() -> None:

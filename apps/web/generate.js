@@ -1,13 +1,10 @@
-// Generate screen — temporary browser generation adapter.
+// Generate screen — localhost SQLite generation with a direct-file fallback.
 //
-// This module mirrors scripts/services/content_generation.py and
-// scripts/ai/safety.py inside the browser so the static demo can produce
-// realistic, deterministic mock drafts without any backend.
-//
-// Preview generation remains a deterministic browser mirror. When the
-// localhost bridge is active, Save to Drafts sends the bundle through Python
-// schema validation and SQLite persistence. Direct-file mode stays a
-// localStorage demo fallback.
+// When the localhost bridge is active, preview generation runs through the
+// Python content-generation service so Brand Brain, media metadata, active AI
+// memory, prompt provenance, and safety review share one source of truth.
+// Direct-file mode keeps the deterministic browser mirror as a localStorage
+// demo fallback.
 
 (function () {
   const BRAND_KEY = "local-social-ai-manager.brandBrain";
@@ -410,7 +407,7 @@
         contentGoal: input.contentGoal,
         contentAngle: input.contentAngle,
         selectedPlatforms: platforms.slice(),
-        TODO: "replace with response from /api/content-generation once backend is live",
+        fallbackMode: "Direct-file browser demo. Use the localhost bridge for SQLite-backed generation.",
       },
       providerMetadata: {
         deterministic: true,
@@ -1331,7 +1328,7 @@
     node.removeAttribute("data-kind");
   }
 
-  function handleGenerate(event) {
+  async function handleGenerate(event) {
     event.preventDefault();
     clearSaveStatus();
     setError("");
@@ -1353,22 +1350,36 @@
     }
 
     setLoading(true);
-    // Use a microtask delay so the loading UI gets a chance to render.
-    window.setTimeout(() => {
-      try {
+    try {
+      // Give the loading UI a chance to paint before local generation begins.
+      await new Promise((resolve) => window.setTimeout(resolve, 16));
+      const bridge = activeApiBridge();
+      if (bridge) {
+        const bundle = await bridge.request("/api/content-generation", {
+          method: "POST",
+          body: {
+            input: {
+              ...input,
+              brandProfileId: brand.id,
+            },
+          },
+        });
+        lastBundle = bundle;
+        renderResults(bundle);
+      } else {
         const pause = setEmergencyPauseFromSettings();
         const bundle = generateBundle(input, brand, pause);
         lastBundle = bundle;
         renderResults(bundle);
-      } catch (error) {
-        console.error("generate: bundle failed", error);
-        setError("Could not generate drafts. Check the console for details.");
-        lastBundle = null;
-        renderResults(null);
-      } finally {
-        setLoading(false);
       }
-    }, 16);
+    } catch (error) {
+      console.error("generate: bundle failed", error);
+      setError(error.message || "Could not generate drafts. Check the console for details.");
+      lastBundle = null;
+      renderResults(null);
+    } finally {
+      setLoading(false);
+    }
   }
 
   let draftSaveInProgress = false;
