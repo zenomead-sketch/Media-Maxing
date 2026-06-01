@@ -367,6 +367,43 @@ class LocalApiServerTest(unittest.TestCase):
         self.assertEqual(queue["queueStatus"], "blocked")
         self.assertIn("needs_attention", queue["preflightErrors"])
 
+    def test_publish_queue_cancel_and_skip_routes_persist_without_deleting_records(self):
+        cancel_app = self._application()
+        canceled = cancel_app.dispatch(
+            "POST",
+            "/api/publish-queue/demo-queue-gutter-reminder/cancel",
+            body={"reason": "Owner canceled local demo item."},
+        ).body
+        canceled_bootstrap = cancel_app.dispatch("GET", "/api/bootstrap").body
+
+        self.assertEqual(canceled["queueStatus"], "canceled")
+        self.assertEqual(
+            next(
+                item
+                for item in canceled_bootstrap["scheduledPosts"]
+                if item["id"] == "demo-scheduled-gutter-reminder"
+            )["status"],
+            "canceled",
+        )
+
+        skip_app = self._application()
+        skipped = skip_app.dispatch(
+            "POST",
+            "/api/publish-queue/demo-queue-gutter-reminder/skip",
+            body={"reason": "Owner skipped local demo item."},
+        ).body
+        skipped_bootstrap = skip_app.dispatch("GET", "/api/bootstrap").body
+
+        self.assertEqual(skipped["queueStatus"], "skipped")
+        self.assertEqual(
+            next(
+                item
+                for item in skipped_bootstrap["scheduledPosts"]
+                if item["id"] == "demo-scheduled-gutter-reminder"
+            )["status"],
+            "needs_attention",
+        )
+
     def test_unknown_route_returns_safe_error(self):
         app = self._application()
 

@@ -235,12 +235,12 @@
     return window.localApiBridge?.available ? window.localApiBridge : null;
   }
 
-  function persistThroughApi(path, body) {
+  async function persistThroughApi(path, body) {
     const bridge = activeApiBridge();
-    if (!bridge) return;
-    bridge.request(path, { method: "PATCH", body }).catch((error) => {
-      console.warn("local-api: SQLite persistence failed", error);
-    });
+    if (!bridge) return null;
+    const result = await bridge.request(path, { method: "PATCH", body });
+    await bridge.sync();
+    return result;
   }
 
   const defaultSettings = {
@@ -535,25 +535,64 @@
     return { posts, queueItems };
   }
 
+  function settingsUpdates(settings) {
+    return {
+      appName: settings.appName,
+      appEnvironment: settings.appEnvironment,
+      localDataDirectory: settings.localDataDirectory,
+      defaultTimezone: settings.defaultTimezone,
+      defaultPlatformTargets: settings.defaultPlatformTargets,
+      automationLevel: settings.automationLevel,
+      requireApprovalBeforePublishing: Boolean(settings.requireApprovalBeforePublishing),
+      requireApprovalBeforeReplying: Boolean(settings.requireApprovalBeforeReplying),
+      emergencyPauseEnabled: Boolean(settings.emergencyPauseEnabled),
+      aiProviderPreference: settings.aiProviderPreference,
+    };
+  }
+
+  function brandProfileUpdates(profile) {
+    return {
+      businessName: profile.businessName,
+      tagline: profile.tagline,
+      industry: profile.industry,
+      description: profile.description,
+      services: profile.services,
+      serviceAreas: profile.serviceAreas,
+      targetCustomers: profile.targetCustomers,
+      brandVoice: profile.brandVoice,
+      toneRules: profile.toneRules,
+      bannedWords: profile.bannedWords,
+      preferredWords: profile.preferredWords,
+      commonCTAs: profile.commonCTAs,
+      hashtags: profile.hashtags,
+      website: profile.website,
+      phone: profile.phone,
+      email: profile.email,
+      approvalRules: profile.approvalRules,
+      safetyRules: profile.safetyRules,
+      examplePosts: profile.examplePosts,
+    };
+  }
+
   const settingsAdapter = {
     load() {
       // api-client.js hydrates this adapter from SQLite when the localhost
       // bridge is active. Direct-file mode keeps a browser demo fallback.
       const rawSettings = window.localStorage.getItem(STORAGE_KEY);
       if (!rawSettings) {
-        this.save(defaultSettings);
+        this.saveLocal(defaultSettings);
         return { ...defaultSettings };
       }
 
       try {
         return { ...defaultSettings, ...JSON.parse(rawSettings) };
       } catch (_error) {
-        this.save(defaultSettings);
+        this.saveLocal(defaultSettings);
         return { ...defaultSettings };
       }
     },
 
-    save(settings) {
+    saveLocal(settings) {
       const now = new Date().toISOString();
       const existing = this.loadWithoutFallback();
       const nextSettings = {
@@ -562,8 +601,16 @@
         updatedAt: now,
       };
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextSettings));
-      persistThroughApi("/api/settings", settings);
       return nextSettings;
+    },
+
+    async save(settings) {
+      const bridge = activeApiBridge();
+      if (bridge) {
+        await persistThroughApi("/api/settings", settingsUpdates(settings));
+        return this.load();
+      }
+      return this.saveLocal(settings);
     },
 
     loadWithoutFallback() {
@@ -578,7 +625,12 @@
       }
     },
 
-    reset() {
+    async reset() {
+      const bridge = activeApiBridge();
+      if (bridge) {
+        await persistThroughApi("/api/settings", settingsUpdates(defaultSettings));
+        return this.load();
+      }
       window.localStorage.removeItem(STORAGE_KEY);
       return this.load();
     },
@@ -590,19 +642,19 @@
       // bridge is active. Direct-file mode keeps a browser demo fallback.
       const rawProfile = window.localStorage.getItem(BRAND_STORAGE_KEY);
       if (!rawProfile) {
-        this.save(defaultBrandProfile);
+        this.saveLocal(defaultBrandProfile);
         return cloneBrandProfile(defaultBrandProfile);
       }
 
       try {
         return { ...cloneBrandProfile(defaultBrandProfile), ...JSON.parse(rawProfile) };
       } catch (_error) {
-        this.save(defaultBrandProfile);
+        this.saveLocal(defaultBrandProfile);
         return cloneBrandProfile(defaultBrandProfile);
       }
     },
 
-    save(profile) {
+    saveLocal(profile) {
       const now = new Date().toISOString();
       const existing = this.loadWithoutFallback();
       const nextProfile = {
@@ -612,8 +664,21 @@
         updatedAt: now,
       };
       window.localStorage.setItem(BRAND_STORAGE_KEY, JSON.stringify(nextProfile));
-      persistThroughApi(`/api/brand-profiles/${encodeURIComponent(nextProfile.id)}`, profile);
       return nextProfile;
+    },
+
+    async save(profile) {
+      const bridge = activeApiBridge();
+      const existing = this.loadWithoutFallback();
+      const profileId = existing?.id || profile.id || defaultBrandProfile.id;
+      if (bridge) {
+        await persistThroughApi(
+          `/api/brand-profiles/${encodeURIComponent(profileId)}`,
+          brandProfileUpdates(profile),
+        );
+        return this.load();
+      }
+      return this.saveLocal(profile);
     },
 
     loadWithoutFallback() {
@@ -628,7 +693,17 @@
       }
     },
 
-    reset() {
+    async reset() {
+      const bridge = activeApiBridge();
+      const existing = this.loadWithoutFallback();
+      const profileId = existing?.id || defaultBrandProfile.id;
+      if (bridge) {
+        await persistThroughApi(
+          `/api/brand-profiles/${encodeURIComponent(profileId)}`,
+          brandProfileUpdates(defaultBrandProfile),
+        );
+        return this.load();
+      }
       window.localStorage.removeItem(BRAND_STORAGE_KEY);
       return this.load();
     },
@@ -1346,7 +1421,7 @@
     if (summary) {
       const industry = profile.industry || "local service business";
       const voice = profile.brandVoice || "brand voice not set yet";
-      summary.textContent = `${industry} memory using a ${voice} voice. Local demo data only.`;
+      summary.textContent = `${industry} memory using a ${voice} voice. Stored locally through the SQLite bridge when available.`;
     }
     if (serviceCount) {
       serviceCount.textContent = String((profile.services || []).length);
@@ -3071,9 +3146,9 @@
     }
     const post = scheduledPostForQueueItem(item);
     const bridge = activeApiBridge();
-    if (bridge && post) {
+    if (bridge) {
       try {
-        await bridge.request(`/api/calendar/${encodeURIComponent(post.id)}/cancel`, {
+        await bridge.request(`/api/publish-queue/${encodeURIComponent(item.id)}/cancel`, {
           method: "POST",
           body: { reason: "Queue item canceled locally by owner." },
         });
@@ -3811,7 +3886,7 @@
       updatePauseDisplay(event.target.checked);
     });
 
-    form.addEventListener("submit", (event) => {
+    form.addEventListener("submit", async (event) => {
       event.preventDefault();
       const settings = collectSettingsFromForm();
       const validationMessage = validateSettings(settings);
@@ -3821,15 +3896,33 @@
         return;
       }
 
-      const savedSettings = settingsAdapter.save(settings);
-      applySettingsToForm(savedSettings);
-      setMessage("success", "Settings saved locally for this browser demo.");
+      try {
+        const savedSettings = await settingsAdapter.save(settings);
+        applySettingsToForm(savedSettings);
+        setMessage(
+          "success",
+          activeApiBridge()
+            ? "Settings saved to local SQLite."
+            : "Settings saved locally for this browser demo.",
+        );
+      } catch (error) {
+        setMessage("error", error.message || "Settings could not be saved to local SQLite.");
+      }
     });
 
-    resetButton.addEventListener("click", () => {
-      const resetSettings = settingsAdapter.reset();
-      applySettingsToForm(resetSettings);
-      setMessage("success", "Demo settings reset to approval-required defaults.");
+    resetButton.addEventListener("click", async () => {
+      try {
+        const resetSettings = await settingsAdapter.reset();
+        applySettingsToForm(resetSettings);
+        setMessage(
+          "success",
+          activeApiBridge()
+            ? "Settings reset to approval-required defaults in local SQLite."
+            : "Demo settings reset to approval-required defaults.",
+        );
+      } catch (error) {
+        setMessage("error", error.message || "Settings could not be reset in local SQLite.");
+      }
     });
   }
 
@@ -3857,7 +3950,7 @@
       updateBrandMemorySummary(collectBrandProfileFromForm());
     });
 
-    form.addEventListener("submit", (event) => {
+    form.addEventListener("submit", async (event) => {
       event.preventDefault();
       const profile = collectBrandProfileFromForm();
       const validationMessage = validateBrandProfile(profile);
@@ -3867,15 +3960,33 @@
         return;
       }
 
-      const savedProfile = brandBrainAdapter.save(profile);
-      applyBrandProfileToForm(savedProfile);
-      setBrandMessage("success", "Brand Brain saved locally for this browser demo.");
+      try {
+        const savedProfile = await brandBrainAdapter.save(profile);
+        applyBrandProfileToForm(savedProfile);
+        setBrandMessage(
+          "success",
+          activeApiBridge()
+            ? "Brand Brain saved to local SQLite."
+            : "Brand Brain saved locally for this browser demo.",
+        );
+      } catch (error) {
+        setBrandMessage("error", error.message || "Brand Brain could not be saved to local SQLite.");
+      }
     });
 
-    resetButton.addEventListener("click", () => {
-      const resetProfile = brandBrainAdapter.reset();
-      applyBrandProfileToForm(resetProfile);
-      setBrandMessage("success", "Demo Brand Brain reset.");
+    resetButton.addEventListener("click", async () => {
+      try {
+        const resetProfile = await brandBrainAdapter.reset();
+        applyBrandProfileToForm(resetProfile);
+        setBrandMessage(
+          "success",
+          activeApiBridge()
+            ? "Brand Brain reset to demo defaults in local SQLite."
+            : "Demo Brand Brain reset.",
+        );
+      } catch (error) {
+        setBrandMessage("error", error.message || "Brand Brain could not be reset in local SQLite.");
+      }
     });
   }
 

@@ -33,7 +33,8 @@ persist to SQLite:
 - generated preview saves to Drafts
 - draft edits, approval actions, and scheduling
 - Calendar reschedule, cancel, notes, and needs-attention actions
-- Publish Queue preflight, mock completion, manual completion, and export
+- Publish Queue preflight, mock completion, manual completion, cancel, skip
+  service support, and export
 - manual and mock analytics snapshots
 - analytics insight status updates
 - mock engagement ingestion, inbox status updates, reply suggestions, and

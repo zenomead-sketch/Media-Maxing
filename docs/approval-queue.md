@@ -75,7 +75,7 @@ Future publishing eligibility requires everything scheduling requires, plus:
 
 - Platform-specific metadata is present when needed.
 - No unresolved revision request, rejected status, or archived status exists.
-- If a `social_accounts` table exists in a future batch, a connected account must exist for the target platform.
+- A connected account must exist for the target platform before future real publishing can become eligible. Missing accounts remain warnings for local scheduling and manual export.
 
 Real publishing remains disabled by policy. The service currently returns a warning named `real_publishing_disabled_by_policy` even when a draft passes the future publishing gate.
 

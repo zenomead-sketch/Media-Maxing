@@ -35,6 +35,8 @@ class WebSettingsScreenTest(unittest.TestCase):
         self.assertIn("Local settings adapter", html)
         self.assertIn("activeApiBridge", script)
         self.assertIn("persistThroughApi", script)
+        self.assertIn("await persistThroughApi(\"/api/settings\"", script)
+        self.assertIn("Settings saved to local SQLite.", script)
         self.assertIn("localStorage", script)
         self.assertIn("autonomous_content_engine", script)
         self.assertIn("approval before publishing", script)

@@ -134,6 +134,11 @@ Connected Accounts and Social Integration Setup now exist in the static web app.
 Launch through the localhost bridge for SQLite-backed mock account state and
 server-safe masked setup status. Direct-file mode remains a demo fallback.
 
-## Future Work
+## Current Guarded Readiness
 
-Batch 6 may add guarded real OAuth readiness and additional platform scaffolds. Real publishing still remains disabled until a later explicit task enables one platform behind safety gates.
+Batch 6 added a server-only HTTP client, explicit integration flags, guarded
+Meta OAuth exchange readiness, connector health checks, and YouTube, TikTok,
+LinkedIn, and X scaffolds. Default tests block real network calls.
+
+Real publishing remains disabled until a later explicit task enables one
+platform behind safety gates.

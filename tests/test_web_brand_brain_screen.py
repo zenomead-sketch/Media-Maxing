@@ -46,6 +46,8 @@ class WebBrandBrainScreenTest(unittest.TestCase):
         self.assertIn("Add item", html)
         self.assertIn("BRAND_STORAGE_KEY", script)
         self.assertIn("setupBrandBrainForm", script)
+        self.assertIn("brandProfileUpdates(profile)", script)
+        self.assertIn("Brand Brain saved to local SQLite.", script)
         self.assertIn("localStorage", script)
         self.assertIn("businessName is required", script)
 
