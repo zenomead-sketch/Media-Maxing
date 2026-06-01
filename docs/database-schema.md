@@ -880,11 +880,11 @@ Stores local app settings, safety controls, automation defaults, and integration
 - `require_approval_before_replying`: default `true`.
 - `emergency_pause_enabled`: default `false`.
 - `kill_switch_enabled`: default `false`.
-- `integrations_mode`: default `mock`.
+- `integrations_mode`: `mock`, `disabled`, or `real_oauth`; default `mock`.
 - `enable_real_network_calls`: default `false`.
 - `enable_real_oauth`: default `false`.
 - `enable_real_publishing`: default `false`.
-- `token_storage_mode`: default `placeholder_not_stored`.
+- `token_storage_mode`: `placeholder_not_stored`, `keychain`, `encrypted_file`, `encrypted_database`, or development-only `insecure_dev_only`; default `placeholder_not_stored`.
 - `settings_json`: extra local settings.
 - `created_at`: creation timestamp.
 - `updated_at`: last update timestamp.
@@ -901,3 +901,4 @@ Stores local app settings, safety controls, automation defaults, and integration
 - Emergency pause must block scheduling, queue readiness, mock publishing, future real publishing, future real replies, and unsafe automation.
 - Settings should not store secrets.
 - Real integration flags should fail closed when missing or invalid.
+- Migration `010_reconcile_app_settings_integration_enums.sql` maps the earlier local names `testing`, `real`, `encrypted_local`, and `development_insecure` to the centralized integration flag values without dropping settings rows.

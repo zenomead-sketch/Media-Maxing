@@ -139,6 +139,7 @@ Mock publishing:
 
 - Sets `queueStatus` to `mock_published`.
 - Sets the related scheduled post status to `completed`.
+- Sets the source draft `publishReadinessStatus` to `mock_published`.
 - Creates a local `publish_attempt` with `attemptType = mock_publish`.
 - Does not call external APIs.
 - Does not create a real social post.
@@ -151,7 +152,24 @@ Canceling a queue item:
 
 - Sets `queueStatus` to `canceled`.
 - Sets the related scheduled post status to `canceled` when appropriate.
+- Sets the source draft `publishReadinessStatus` to `canceled`.
+- Writes a local audit record.
 - Does not delete drafts, media, scheduled posts, or queue records.
+
+The backend implementation is `PublishQueueService.cancel`.
+
+## Skip
+
+Skipping a queue item is a local owner-review action for content that should
+stay visible in the history but should not proceed:
+
+- Sets `queueStatus` to `skipped`.
+- Sets the related scheduled post status to `needs_attention`.
+- Sets the source draft `publishReadinessStatus` to `skipped`.
+- Writes a local audit record.
+- Does not delete or publish anything.
+
+The backend implementation is `PublishQueueService.skip`.
 
 ## Current Limitations
 

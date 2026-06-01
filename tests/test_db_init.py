@@ -5,6 +5,7 @@ from contextlib import closing
 from pathlib import Path
 
 from scripts.db.init_db import initialize_database
+from scripts.db.init_db import MIGRATIONS_DIR
 from scripts.db.scheduling_models import (
     PREFLIGHT_STATUSES,
     PUBLISH_ATTEMPT_STATUSES,
@@ -274,6 +275,63 @@ class DatabaseInitializationTest(unittest.TestCase):
                             "2026-06-10T13:00:00Z",
                             "America/New_York",
                         ),
+                    )
+
+    def test_app_settings_integration_enum_migration_maps_legacy_values(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "app.sqlite"
+            migration_files = sorted(MIGRATIONS_DIR.glob("*.sql"))
+
+            with closing(sqlite3.connect(db_path)) as connection:
+                for migration_file in migration_files:
+                    if migration_file.stem == "010_reconcile_app_settings_integration_enums":
+                        break
+                    connection.executescript(migration_file.read_text(encoding="utf-8"))
+                    connection.execute(
+                        "INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)",
+                        (migration_file.stem,),
+                    )
+                connection.execute(
+                    """
+                    UPDATE app_settings
+                    SET integrations_mode = 'real',
+                        token_storage_mode = 'development_insecure'
+                    WHERE id = 'default'
+                    """
+                )
+                connection.commit()
+
+            initialize_database(db_path)
+
+            with closing(sqlite3.connect(db_path)) as connection:
+                settings = connection.execute(
+                    """
+                    SELECT integrations_mode, token_storage_mode
+                    FROM app_settings
+                    WHERE id = 'default'
+                    """
+                ).fetchone()
+                self.assertEqual(settings, ("real_oauth", "insecure_dev_only"))
+
+                connection.execute(
+                    """
+                    UPDATE app_settings
+                    SET integrations_mode = 'real_oauth',
+                        token_storage_mode = 'encrypted_database'
+                    WHERE id = 'default'
+                    """
+                )
+                with self.assertRaises(sqlite3.IntegrityError):
+                    connection.execute(
+                        "UPDATE app_settings SET integrations_mode = 'real' WHERE id = 'default'"
+                    )
+                with self.assertRaises(sqlite3.IntegrityError):
+                    connection.execute(
+                        """
+                        UPDATE app_settings
+                        SET token_storage_mode = 'development_insecure'
+                        WHERE id = 'default'
+                        """
                     )
 
     @staticmethod

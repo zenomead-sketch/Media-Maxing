@@ -22,6 +22,75 @@ export type AutomationLevel =
   | "safe_auto_posting"
   | "autonomous_content_engine";
 
+export type ContentGoal =
+  | "get_leads"
+  | "show_transformation"
+  | "educate_customer"
+  | "promote_offer"
+  | "build_trust"
+  | "announce_availability"
+  | "repurpose_old_content"
+  | "behind_the_scenes"
+  | "seasonal_reminder";
+
+export type ContentAngle =
+  | "before_after"
+  | "educational"
+  | "behind_the_scenes"
+  | "testimonial"
+  | "promotion"
+  | "faq"
+  | "trust_builder"
+  | "transformation"
+  | "seasonal"
+  | "other";
+
+export type ScheduledPostStatus =
+  | "scheduled"
+  | "queued"
+  | "missed"
+  | "canceled"
+  | "completed"
+  | "failed"
+  | "needs_attention";
+
+export type PublishQueueStatus =
+  | "waiting"
+  | "ready"
+  | "blocked"
+  | "processing"
+  | "mock_published"
+  | "manually_exported"
+  | "failed"
+  | "canceled"
+  | "skipped";
+
+export type PreflightStatus =
+  | "not_checked"
+  | "passed"
+  | "warnings"
+  | "errors"
+  | "blocked";
+
+export type PublishAttemptType =
+  | "preflight"
+  | "mock_publish"
+  | "manual_export"
+  | "future_real_publish";
+
+export type PublishAttemptStatus =
+  | "started"
+  | "succeeded"
+  | "failed"
+  | "skipped"
+  | "blocked";
+
+export type PublishReadinessStatus =
+  | "not_scheduled"
+  | "scheduled"
+  | "queued"
+  | PublishQueueStatus;
+
 export type SocialPlatform = Platform;
 
 export type PlatformFeatureStatus =
@@ -393,6 +462,65 @@ export interface SocialAccount {
   updatedAt: string;
 }
 
+export interface PlatformToken {
+  id: string;
+  socialAccountId: string;
+  platform: Platform;
+  tokenType:
+    | "oauth_access"
+    | "oauth_refresh"
+    | "long_lived_access"
+    | "page_access"
+    | "app_token_placeholder"
+    | "unknown";
+  // Token blobs are server-only and must never appear in frontend DTOs.
+  encryptedAccessToken?: string;
+  encryptedRefreshToken?: string;
+  accessTokenExpiresAt?: string;
+  refreshTokenExpiresAt?: string;
+  scope: string;
+  tokenVersion: number;
+  encryptionStatus: TokenStorageResult["encryptionStatus"];
+  lastRefreshAt?: string;
+  revokedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OAuthState {
+  id: string;
+  platform: Platform;
+  // Raw OAuth state is never persisted.
+  stateHash: string;
+  redirectUri: string;
+  codeVerifierHash?: string;
+  requestedScopes: string[];
+  status: "created" | "consumed" | "expired" | "failed";
+  createdAt: string;
+  expiresAt: string;
+  consumedAt?: string;
+  errorMessage?: string;
+}
+
+export interface ConnectorAuditLog {
+  id: string;
+  platform: Platform;
+  socialAccountId?: string;
+  action:
+    | "oauth_start"
+    | "oauth_callback"
+    | "token_exchange"
+    | "token_refresh"
+    | "connection_validate"
+    | "disconnect"
+    | "reauth_required"
+    | "error";
+  status: string;
+  message: string;
+  safeMetadata?: Record<string, unknown>;
+  createdAt: string;
+}
+
 export interface SafeSocialAccountDTO {
   id: string;
   platform: Platform;
@@ -412,14 +540,30 @@ export interface SafeSocialAccountDTO {
 export interface MediaAsset {
   id: string;
   mediaType: MediaType;
+  originalFilename: string;
   originalPath: string;
   processedPath?: string;
   thumbnailPath?: string;
   mimeType?: string;
-  fileName: string;
+  fileSizeBytes?: number;
+  title: string;
+  description: string;
   tags: string[];
-  // Job, customer, location, or campaign context stored locally by the user.
-  contextNotes?: string;
+  serviceType: string;
+  locationName: string;
+  city: string;
+  state: string;
+  projectDate: string;
+  contentAngle: ContentAngle | "";
+  qualityRating?: number;
+  usageStatus:
+    | "new"
+    | "reviewed"
+    | "ready_for_generation"
+    | "used_in_draft"
+    | "published"
+    | "archived";
+  notes: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -427,14 +571,24 @@ export interface MediaAsset {
 export interface BrandProfile {
   id: string;
   businessName: string;
+  tagline?: string;
+  industry?: string;
   description?: string;
-  voice?: string;
+  brandVoice?: string;
   services: string[];
-  locations: string[];
-  targetAudience?: string;
-  // Claims should be supportable. AI must not invent unsupported claims.
-  supportedClaims: string[];
-  blockedPhrases?: string[];
+  serviceAreas: string[];
+  targetCustomers: string[];
+  toneRules: string[];
+  bannedWords: string[];
+  preferredWords: string[];
+  commonCTAs: string[];
+  hashtags: string[];
+  website?: string;
+  phone?: string;
+  email?: string;
+  approvalRules: string[];
+  safetyRules: string[];
+  examplePosts: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -442,27 +596,8 @@ export interface BrandProfile {
 export interface ContentIdea {
   id: string;
   brandProfileId: string;
-  goal:
-    | "get_leads"
-    | "show_transformation"
-    | "educate_customer"
-    | "promote_offer"
-    | "build_trust"
-    | "announce_availability"
-    | "repurpose_old_content"
-    | "behind_the_scenes"
-    | "seasonal_reminder";
-  angle:
-    | "before_after"
-    | "educational"
-    | "behind_the_scenes"
-    | "testimonial"
-    | "promotion"
-    | "faq"
-    | "trust_builder"
-    | "transformation"
-    | "seasonal"
-    | "other";
+  goal: ContentGoal;
+  angle: ContentAngle;
   targetPlatforms: Platform[];
   mediaAssetIds: string[];
   notes?: string;
@@ -504,6 +639,8 @@ export interface GeneratedPost {
   promptVersion?: string;
   promptMetadata?: Record<string, unknown>;
   generationTimestamp?: string;
+  lastScheduledAt?: string;
+  publishReadinessStatus?: PublishReadinessStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -511,14 +648,59 @@ export interface GeneratedPost {
 export interface ScheduledPost {
   id: string;
   generatedPostId: string;
+  brandProfileId: string;
   platform: Platform;
   scheduledFor: string;
-  status: "scheduled" | "blocked" | "canceled" | "ready" | "completed";
+  timezone: string;
+  status: ScheduledPostStatus;
   // Snapshot fields prevent later draft edits from silently changing scheduled content.
   captionSnapshot: string;
-  mediaAssetIdSnapshot: string[];
+  mediaAssetIds: string[];
+  platformAccountId?: string;
+  publishQueueItemId?: string;
+  recurrenceRule?: string;
+  isRecurringTemplate: boolean;
+  userNotes?: string;
+  preflightSnapshot: Record<string, unknown>;
+  scheduleMetadata: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
+  canceledAt?: string;
+}
+
+export interface PublishQueueItem {
+  id: string;
+  scheduledPostId: string;
+  generatedPostId: string;
+  brandProfileId: string;
+  platform: Platform;
+  queueStatus: PublishQueueStatus;
+  dueAt: string;
+  timezone: string;
+  priority: number;
+  preflightStatus: PreflightStatus;
+  preflightErrors: string[];
+  preflightWarnings: string[];
+  mockPublishEnabled: boolean;
+  manualExportRequired: boolean;
+  lastCheckedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PublishAttempt {
+  id: string;
+  publishQueueItemId: string;
+  scheduledPostId: string;
+  platform: Platform;
+  attemptType: PublishAttemptType;
+  attemptStatus: PublishAttemptStatus;
+  startedAt: string;
+  finishedAt?: string;
+  errorCode?: string;
+  errorMessage?: string;
+  providerResponse?: Record<string, unknown>;
+  createdAt: string;
 }
 
 export interface PublishedPost {
@@ -748,6 +930,21 @@ export interface WeeklyReport {
   platformBreakdown: Record<string, unknown>;
   metricTotals: Record<string, unknown>;
   generatedBy: WeeklyReportGeneratedBy;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AppSettings {
+  appName: string;
+  appEnvironment: string;
+  localDataDirectory: string;
+  defaultTimezone: string;
+  defaultPlatformTargets: Platform[];
+  automationLevel: AutomationLevel;
+  requireApprovalBeforePublishing: boolean;
+  requireApprovalBeforeReplying: boolean;
+  emergencyPauseEnabled: boolean;
+  aiProviderPreference: "mock" | "openai" | "anthropic" | "local";
   createdAt: string;
   updatedAt: string;
 }

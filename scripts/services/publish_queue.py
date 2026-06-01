@@ -92,6 +92,12 @@ class PublishQueueService:
                 """,
                 (now, scheduled_row["id"]),
             )
+            self._update_generated_post_readiness(
+                connection,
+                queue_row["generated_post_id"],
+                "manually_exported",
+                now,
+            )
             connection.execute(
                 """
                 INSERT INTO publish_attempts (
@@ -171,6 +177,12 @@ class PublishQueueService:
                 """,
                 (now, scheduled_row["id"]),
             )
+            self._update_generated_post_readiness(
+                connection,
+                queue_row["generated_post_id"],
+                "mock_published",
+                now,
+            )
             connection.execute(
                 """
                 INSERT INTO publish_attempts (
@@ -201,12 +213,190 @@ class PublishQueueService:
 
         return self._result(queue_row["id"], attempt_id=attempt_id)
 
+    def cancel(
+        self,
+        queue_item_id: str,
+        *,
+        actor_label: str = "local_user",
+        reason: str | None = None,
+    ) -> QueueActionResult:
+        queue_row = self._require_queue_row(queue_item_id)
+        if queue_row["queue_status"] in FINAL_QUEUE_STATUSES:
+            if queue_row["queue_status"] == "canceled":
+                return self._result(queue_row["id"])
+            raise PublishQueueError(
+                "Completed or skipped queue items cannot be canceled.",
+                ["queue_already_processed"],
+            )
+        if queue_row["queue_status"] == "processing":
+            raise PublishQueueError(
+                "Processing queue items cannot be canceled.",
+                ["queue_processing"],
+            )
+
+        now = _now_utc()
+        with closing(sqlite3.connect(self.database_path)) as connection:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.execute("BEGIN")
+            connection.execute(
+                """
+                UPDATE publish_queue_items
+                SET queue_status = 'canceled',
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (now, queue_row["id"]),
+            )
+            connection.execute(
+                """
+                UPDATE scheduled_posts
+                SET status = 'canceled',
+                    canceled_at = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (now, now, queue_row["scheduled_post_id"]),
+            )
+            self._update_generated_post_readiness(
+                connection,
+                queue_row["generated_post_id"],
+                "canceled",
+                now,
+            )
+            self._append_audit_log(
+                connection,
+                scheduled_post_id=queue_row["scheduled_post_id"],
+                action="queue_item_canceled",
+                actor_label=actor_label,
+                notes=reason or "Publish queue item canceled locally.",
+                changed_fields={
+                    "publishQueueItemId": queue_row["id"],
+                    "previousQueueStatus": queue_row["queue_status"],
+                    "queueStatus": "canceled",
+                },
+                created_at=now,
+            )
+            connection.commit()
+        return self._result(queue_row["id"])
+
+    def skip(
+        self,
+        queue_item_id: str,
+        *,
+        actor_label: str = "local_user",
+        reason: str | None = None,
+    ) -> QueueActionResult:
+        queue_row = self._require_queue_row(queue_item_id)
+        if queue_row["queue_status"] in FINAL_QUEUE_STATUSES:
+            if queue_row["queue_status"] == "skipped":
+                return self._result(queue_row["id"])
+            raise PublishQueueError(
+                "Completed or canceled queue items cannot be skipped.",
+                ["queue_already_processed"],
+            )
+        if queue_row["queue_status"] == "processing":
+            raise PublishQueueError(
+                "Processing queue items cannot be skipped.",
+                ["queue_processing"],
+            )
+
+        now = _now_utc()
+        with closing(sqlite3.connect(self.database_path)) as connection:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.execute("BEGIN")
+            connection.execute(
+                """
+                UPDATE publish_queue_items
+                SET queue_status = 'skipped',
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (now, queue_row["id"]),
+            )
+            connection.execute(
+                """
+                UPDATE scheduled_posts
+                SET status = 'needs_attention',
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (now, queue_row["scheduled_post_id"]),
+            )
+            self._update_generated_post_readiness(
+                connection,
+                queue_row["generated_post_id"],
+                "skipped",
+                now,
+            )
+            self._append_audit_log(
+                connection,
+                scheduled_post_id=queue_row["scheduled_post_id"],
+                action="queue_item_skipped",
+                actor_label=actor_label,
+                notes=reason or "Publish queue item skipped locally.",
+                changed_fields={
+                    "publishQueueItemId": queue_row["id"],
+                    "previousQueueStatus": queue_row["queue_status"],
+                    "queueStatus": "skipped",
+                    "scheduledPostStatus": "needs_attention",
+                },
+                created_at=now,
+            )
+            connection.commit()
+        return self._result(queue_row["id"])
+
     def _ensure_not_emergency_paused(self, action: str) -> None:
         if load_app_settings(self.database_path).emergencyPauseEnabled:
             raise PublishQueueError(
                 f"Emergency pause blocks {action}.",
                 ["emergency_pause_enabled"],
             )
+
+    def _update_generated_post_readiness(
+        self,
+        connection: sqlite3.Connection,
+        generated_post_id: str,
+        readiness_status: str,
+        updated_at: str,
+    ) -> None:
+        connection.execute(
+            """
+            UPDATE generated_posts
+            SET publish_readiness_status = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (readiness_status, updated_at, generated_post_id),
+        )
+
+    def _append_audit_log(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        scheduled_post_id: str,
+        action: str,
+        actor_label: str,
+        notes: str,
+        changed_fields: dict[str, Any],
+        created_at: str,
+    ) -> None:
+        connection.execute(
+            """
+            INSERT INTO approval_logs (
+              id, entity_type, entity_id, action, actor_label,
+              notes, changed_fields_json, created_at
+            ) VALUES (?, 'scheduled_post', ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(uuid.uuid4()),
+                scheduled_post_id,
+                action,
+                actor_label,
+                notes,
+                _json(changed_fields),
+                created_at,
+            ),
+        )
 
     def _result(self, queue_item_id: str, *, attempt_id: str | None = None) -> QueueActionResult:
         row = self._require_queue_row(queue_item_id)

@@ -233,6 +233,16 @@ class LocalApiApplication:
                     queue_item_id,
                     notes=body.get("notes"),
                 )
+            if action == "cancel":
+                return PublishQueueService(self.database_path).cancel(
+                    queue_item_id,
+                    reason=body.get("reason"),
+                )
+            if action == "skip":
+                return PublishQueueService(self.database_path).skip(
+                    queue_item_id,
+                    reason=body.get("reason"),
+                )
             if action == "export-package":
                 return ManualExportService(self.database_path).export_queue_item(
                     queue_item_id,
