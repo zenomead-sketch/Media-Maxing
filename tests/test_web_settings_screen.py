@@ -32,7 +32,7 @@ class WebSettingsScreenTest(unittest.TestCase):
             self.assertIn(f'id="{element_id}"', html)
 
         self.assertIn("Emergency pause", html)
-        self.assertIn("Temporary browser settings adapter", html)
+        self.assertIn("Local settings adapter", html)
         self.assertIn("TODO", script)
         self.assertIn("localStorage", script)
         self.assertIn("autonomous_content_engine", script)

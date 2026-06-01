@@ -82,9 +82,9 @@ class WebGenerateScreenTest(unittest.TestCase):
             with self.subTest(angle=option_value):
                 self.assertIn(f'value="{option_value}"', self.html)
 
-    def test_temporary_adapter_callout_and_todo_present(self):
-        self.assertIn("Temporary browser generation adapter", self.html)
-        self.assertIn("TODO", self.script)
+    def test_browser_preview_and_sqlite_save_boundary_are_visible(self):
+        self.assertIn("Preview generation uses a deterministic browser mock", self.html)
+        self.assertIn("/api/drafts/save-generated", self.script)
         self.assertIn("localStorage", self.script)
         self.assertIn("local-social-ai-manager.drafts", self.script)
 

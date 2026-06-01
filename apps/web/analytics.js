@@ -1,9 +1,9 @@
-// Analytics screen - Temporary browser Analytics adapter.
+// Analytics screen - Local browser Analytics adapter.
 //
-// This module mirrors the local SQLite analytics service closely enough for
-// static UI development. TODO: replace localStorage reads and writes with a
-// thin local API bridge into scripts/services/analytics.py. Keep manual and
-// mock provenance visible after that bridge exists.
+// This module mirrors the local SQLite analytics service for rendering.
+// When the localhost bridge is active, mutations persist through
+// scripts/services/analytics.py. Direct-file mode remains a localStorage demo
+// fallback. Keep manual and mock provenance visible in both modes.
 
 (function () {
   const ANALYTICS_SNAPSHOTS_KEY = "local-social-ai-manager.analyticsSnapshots";
@@ -27,6 +27,14 @@
     "calls",
     "websiteClicks",
   ];
+
+  function activeApiBridge() {
+    return window.localApiBridge?.available ? window.localApiBridge : null;
+  }
+
+  function currentBrandProfileId() {
+    return activeApiBridge()?.snapshot?.brandProfile?.id || "demo-brand-brightside-exterior-care";
+  }
 
   function getElement(id) {
     return document.getElementById(id);
@@ -616,9 +624,23 @@
       : '<p class="media-state empty-state">No local insights yet.</p>';
   }
 
-  function handleAnalyticsInsightAction(event) {
+  async function handleAnalyticsInsightAction(event) {
     const button = event.target.closest("[data-analytics-insight-action]");
     if (!button) return;
+    const bridge = activeApiBridge();
+    if (bridge) {
+      try {
+        await bridge.request(`/api/analytics/insights/${encodeURIComponent(button.dataset.analyticsInsightId)}`, {
+          method: "PATCH",
+          body: { status: button.dataset.analyticsInsightAction },
+        });
+        await bridge.sync();
+        renderAnalyticsInsights();
+      } catch (error) {
+        console.error("analytics: insight status update failed", error);
+      }
+      return;
+    }
     const insights = loadAnalyticsInsights().map((insight) => (
       insight.id === button.dataset.analyticsInsightId
         ? { ...insight, status: button.dataset.analyticsInsightAction, updatedAt: new Date().toISOString() }
@@ -663,7 +685,7 @@
     return ["development", "demo", "test"].includes(settings.appEnvironment || "development");
   }
 
-  function handleManualSubmit(event) {
+  async function handleManualSubmit(event) {
     event.preventDefault();
     const input = {
       generatedPostId: getElement("analytics-manual-post").value,
@@ -676,8 +698,35 @@
       input[field] = getElement(id).value;
     });
     try {
-      createManualAnalyticsSnapshot(input);
-      setManualMessage("success", "Manual analytics snapshot saved locally.");
+      const bridge = activeApiBridge();
+      if (bridge) {
+        const metrics = {};
+        numericFields.forEach((field) => {
+          metrics[field] = toMetric(input[field]);
+        });
+        await bridge.request("/api/analytics/snapshots", {
+          method: "POST",
+          body: {
+            brand_profile_id: currentBrandProfileId(),
+            platform: input.platform,
+            snapshot_date: input.snapshotDate,
+            generated_post_id: input.generatedPostId.startsWith("analytics-demo-")
+              ? null
+              : input.generatedPostId,
+            notes: input.notes,
+            metrics,
+          },
+        });
+        await bridge.sync();
+      } else {
+        createManualAnalyticsSnapshot(input);
+      }
+      setManualMessage(
+        "success",
+        bridge
+          ? "Manual analytics snapshot saved to local SQLite."
+          : "Manual analytics snapshot saved locally for this browser demo.",
+      );
       renderAnalytics();
     } catch (error) {
       setManualMessage("error", error.message || "Manual snapshot could not be saved.");
@@ -720,9 +769,17 @@
     getElement("analytics-insights").addEventListener("click", handleAnalyticsInsightAction);
     const generateMockButton = getElement("analytics-generate-mock");
     generateMockButton.hidden = !mockAnalyticsAllowed();
-    generateMockButton.addEventListener("click", () => {
+    generateMockButton.addEventListener("click", async () => {
       try {
-        const created = generateMockAnalytics();
+        const bridge = activeApiBridge();
+        const result = bridge
+          ? await bridge.request("/api/analytics/mock", {
+            method: "POST",
+            body: { brand_profile_id: currentBrandProfileId() },
+          })
+          : null;
+        if (bridge) await bridge.sync();
+        const created = bridge ? result.snapshots : generateMockAnalytics();
         setMockMessage(
           created.length
             ? `${created.length} clearly labeled mock snapshots generated locally. No real analytics API was called.`
@@ -735,6 +792,7 @@
     });
     getElement("analytics-manual-date").value = dateOnly(new Date());
     renderAnalytics();
+    window.addEventListener("local-api-ready", renderAnalytics);
     window.addEventListener("hashchange", () => {
       if (window.location.hash === "#analytics") renderAnalytics();
     });

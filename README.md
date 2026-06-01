@@ -2,7 +2,9 @@
 
 A local-first AI social media manager for small businesses, local service businesses, and owner-operators.
 
-This project is in early foundation setup. It does not publish real posts, send real replies, connect real platform APIs, or include completed application features yet.
+This project has a local-first MVP foundation with a static web shell, SQLite
+services, and a localhost bridge. It does not publish real posts, send real
+replies, or connect real platform APIs by default.
 
 ## Project Purpose
 
@@ -38,7 +40,8 @@ Planned core features:
 - Safety Center with emergency pause and kill switch controls.
 - Backup, export, and diagnostics tools.
 
-Current completed feature level: repository structure and starter documentation only.
+Current completed feature level: local SQLite workflows through Batch 7
+recovery, with real publishing and real reply sending intentionally disabled.
 
 ## Local-First Privacy Approach
 
@@ -126,7 +129,11 @@ For now:
 2. Copy `.env.example` to `.env` only when a future step needs local configuration.
 3. Do not add real secrets to committed files.
 4. Follow the batch prompts in order.
-5. Open `apps/web/index.html` in a browser to use the current static local demo shell.
+5. Run `python -m apps.api.local_server --database data/app.sqlite --port 8000`.
+6. Open `http://127.0.0.1:8000` for the SQLite-backed web shell.
+
+Opening `apps/web/index.html` directly remains available as a browser-only demo
+fallback. See `docs/local-api-bridge.md`.
 
 Python services provide the local SQLite database, scheduling, preflight, job runner, and manual export behavior.
 
@@ -139,6 +146,7 @@ Current direct commands:
 ```text
 python -m scripts.db.init_db --database data/app.sqlite
 python -m scripts.db.seed_demo --database data/app.sqlite
+python -m apps.api.local_server --database data/app.sqlite --port 8000
 python -m scripts.jobs.local_runner --database data/app.sqlite --once
 python -m scripts.jobs.local_runner --database data/app.sqlite --watch --interval-seconds 30
 python -m scripts.services.manual_export --database data/app.sqlite --queue-item-id QUEUE_ITEM_ID

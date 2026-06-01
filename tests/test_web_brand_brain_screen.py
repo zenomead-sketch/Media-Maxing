@@ -42,7 +42,7 @@ class WebBrandBrainScreenTest(unittest.TestCase):
             self.assertIn(f'id="{element_id}"', html)
 
         self.assertIn("Business memory", html)
-        self.assertIn("Temporary browser Brand Brain adapter", html)
+        self.assertIn("Local Brand Brain memory", html)
         self.assertIn("Add item", html)
         self.assertIn("BRAND_STORAGE_KEY", script)
         self.assertIn("setupBrandBrainForm", script)

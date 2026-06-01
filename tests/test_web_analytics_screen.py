@@ -97,7 +97,7 @@ class WebAnalyticsScreenTest(unittest.TestCase):
             with self.subTest(function_name=function_name):
                 self.assertIn(f"function {function_name}", self.script)
 
-        self.assertIn("Temporary browser Analytics adapter", self.script)
+        self.assertIn("Local browser Analytics adapter", self.script)
         self.assertIn("local-social-ai-manager.analyticsSnapshots", self.script)
         self.assertIn('source: "mock"', self.script)
         self.assertIn('source: "manual"', self.script)

@@ -15,6 +15,7 @@ from scripts.db.analytics_models import (
     ANALYTICS_IMPORT_STATUSES,
     ANALYTICS_IMPORT_TYPES,
     ANALYTICS_SOURCES,
+    CONTENT_INSIGHT_STATUSES,
 )
 from scripts.db.init_db import initialize_database, resolve_database_path
 from scripts.db.settings import PLATFORM_IDS, load_app_settings
@@ -533,6 +534,32 @@ class AnalyticsService:
             self._upsert_content_insight(brand_profile_id, candidate, metrics)
             for candidate in candidates
         ]
+
+    def update_content_insight_status(
+        self,
+        insight_id: str,
+        *,
+        status: str,
+    ) -> ContentInsight:
+        _require_choice("status", status, CONTENT_INSIGHT_STATUSES)
+        now = _now_utc()
+        with closing(sqlite3.connect(self.database_path)) as connection:
+            cursor = connection.execute(
+                """
+                UPDATE content_insights
+                SET status = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (status, now, insight_id),
+            )
+            connection.commit()
+        if not cursor.rowcount:
+            raise AnalyticsServiceError(
+                f"Content insight {insight_id!r} does not exist.",
+                ["content_insight_not_found"],
+            )
+        return self._get_content_insight(insight_id)
 
     def record_analytics_import(
         self,

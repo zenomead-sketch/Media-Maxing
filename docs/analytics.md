@@ -4,7 +4,11 @@ The analytics foundation stores local performance history for approved content. 
 
 The local service is implemented in `scripts/services/analytics.py`.
 
-The static web shell now includes an Analytics screen. Until a browser-to-local-service bridge exists, that screen uses a clearly labeled temporary `localStorage` adapter in `apps/web/analytics.js`. The Python service remains the SQLite source of truth for backend behavior and tests.
+The static web shell includes an Analytics screen. When launched through the
+localhost bridge, manual snapshots, mock snapshots, and insight status updates
+persist to SQLite. Opening the HTML file directly uses a clearly labeled
+temporary `localStorage` demo fallback. The Python service remains the SQLite
+source of truth.
 
 ## Supported Sources
 

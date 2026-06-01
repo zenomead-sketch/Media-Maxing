@@ -343,6 +343,41 @@ class EngagementService:
             ).fetchall()
         return [_row_to_item(row) for row in rows]
 
+    def update_status(self, engagement_item_id: str, *, status: str) -> EngagementItem:
+        _require_choice("status", status, ENGAGEMENT_STATUSES)
+        now = _now_utc()
+        with closing(sqlite3.connect(self.database_path)) as connection:
+            connection.row_factory = sqlite3.Row
+            row = connection.execute(
+                "SELECT 1 FROM engagement_items WHERE id = ?",
+                (engagement_item_id,),
+            ).fetchone()
+            if not row:
+                raise EngagementServiceError(
+                    f"Engagement item {engagement_item_id!r} does not exist.",
+                    ["engagement_item_not_found"],
+                )
+            connection.execute(
+                """
+                UPDATE engagement_items
+                SET status = ?,
+                  requires_response = ?,
+                  updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    status,
+                    int(
+                        status
+                        in {"needs_reply", "reply_suggested", "reply_approved", "escalated"}
+                    ),
+                    now,
+                    engagement_item_id,
+                ),
+            )
+            connection.commit()
+            return self._get_item(connection, engagement_item_id)
+
     def _require_brand(self, brand_profile_id: str) -> None:
         with closing(sqlite3.connect(self.database_path)) as connection:
             exists = connection.execute(

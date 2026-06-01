@@ -1,9 +1,9 @@
-// Engagement Inbox screen - Temporary browser Engagement adapter.
+// Engagement Inbox screen - Local browser Engagement adapter.
 //
-// This module mirrors the local SQLite engagement service closely enough for
-// static UI development. TODO: replace localStorage reads and writes with a
-// thin local API bridge into scripts/services/engagement.py. Replies are not
-// sent automatically. A reply approval means approved locally only. Local
+// This module mirrors the local SQLite engagement service for rendering. When
+// the localhost bridge is active, mutations persist through the Python
+// services. Direct-file mode remains a localStorage demo fallback. Replies are
+// not sent automatically. A reply approval means approved locally only. Local
 // status changes never call social platform APIs.
 
 (function () {
@@ -25,6 +25,19 @@
   ];
   let selectedEngagementId = null;
   let editingSuggestionId = null;
+
+  function activeApiBridge() {
+    return window.localApiBridge?.available ? window.localApiBridge : null;
+  }
+
+  function currentBrandProfileId() {
+    return activeApiBridge()?.snapshot?.brandProfile?.id || "demo-brand-brightside-exterior-care";
+  }
+
+  async function syncBridge() {
+    const bridge = activeApiBridge();
+    if (bridge) await bridge.sync();
+  }
 
   function getElement(id) {
     return document.getElementById(id);
@@ -677,20 +690,32 @@
     error.textContent = kind === "error" ? message : "";
   }
 
-  function handleStatusAction(status) {
+  async function handleStatusAction(status) {
     try {
       const items = loadEngagementItems();
       const item = items.find((entry) => entry.id === selectedEngagementId);
       if (!item) throw new Error("Select an engagement item before recording an action.");
       const previousStatus = item.status;
-      updateEngagementStatus(selectedEngagementId, status);
+      const bridge = activeApiBridge();
+      if (bridge) {
+        await bridge.request(`/api/engagement/${encodeURIComponent(selectedEngagementId)}/status`, {
+          method: "POST",
+          body: {
+            status,
+            suggestion_id: latestSuggestionFor(item.id)?.id || null,
+          },
+        });
+        await syncBridge();
+      } else {
+        updateEngagementStatus(selectedEngagementId, status);
+      }
       const actionByStatus = {
         replied_manually: "mark_replied_manually",
         escalated: "escalate",
         spam: "mark_spam",
         archived: "archive",
       };
-      if (actionByStatus[status]) {
+      if (!bridge && actionByStatus[status]) {
         appendReplyApproval(
           item,
           actionByStatus[status],
@@ -761,9 +786,19 @@
     Object.entries(statusActions).forEach(([id, status]) => {
       getElement(id).addEventListener("click", () => handleStatusAction(status));
     });
-    getElement("engagement-generate-suggestion").addEventListener("click", () => {
+    getElement("engagement-generate-suggestion").addEventListener("click", async () => {
       try {
-        generateReplySuggestion();
+        const bridge = activeApiBridge();
+        if (bridge) {
+          if (!selectedEngagementId) throw new Error("Select an engagement item before generating a reply.");
+          await bridge.request(`/api/engagement/${encodeURIComponent(selectedEngagementId)}/suggestions`, {
+            method: "POST",
+            body: {},
+          });
+          await syncBridge();
+        } else {
+          generateReplySuggestion();
+        }
         setActionMessage("success", "Local AI reply suggestion generated. Review and approve it locally before handling any reply outside the app.");
         renderEngagement();
       } catch (error) {
@@ -777,27 +812,64 @@
       renderEngagementDetail();
       getElement("engagement-suggestion-text").focus();
     });
-    getElement("engagement-save-suggestion-edit").addEventListener("click", () => {
+    getElement("engagement-save-suggestion-edit").addEventListener("click", async () => {
       try {
-        saveSuggestionEdit();
+        const bridge = activeApiBridge();
+        if (bridge) {
+          const suggestion = latestSuggestionFor(selectedEngagementId);
+          if (!suggestion) throw new Error("Choose a suggestion before saving an edit.");
+          await bridge.request(`/api/reply-suggestions/${encodeURIComponent(suggestion.id)}`, {
+            method: "PATCH",
+            body: {
+              suggested_reply: getElement("engagement-suggestion-text").value.trim(),
+              tone: suggestion.tone,
+            },
+          });
+          editingSuggestionId = null;
+          await syncBridge();
+        } else {
+          saveSuggestionEdit();
+        }
         setActionMessage("success", "Local reply edit saved. Safety review ran again. Nothing was sent.");
         renderEngagement();
       } catch (error) {
         setActionMessage("error", error.message || "The local reply edit could not be saved.");
       }
     });
-    getElement("engagement-approve-suggestion").addEventListener("click", () => {
+    getElement("engagement-approve-suggestion").addEventListener("click", async () => {
       try {
-        approveSuggestionLocally();
+        const bridge = activeApiBridge();
+        if (bridge) {
+          const suggestion = latestSuggestionFor(selectedEngagementId);
+          if (!suggestion) throw new Error("Generate a local suggestion before approving.");
+          await bridge.request(`/api/reply-suggestions/${encodeURIComponent(suggestion.id)}/approve`, {
+            method: "POST",
+            body: {},
+          });
+          await syncBridge();
+        } else {
+          approveSuggestionLocally();
+        }
         setActionMessage("success", "Reply approved locally only. Nothing was sent automatically.");
         renderEngagement();
       } catch (error) {
         setActionMessage("error", error.message || "The local reply suggestion could not be approved.");
       }
     });
-    getElement("engagement-reject-suggestion").addEventListener("click", () => {
+    getElement("engagement-reject-suggestion").addEventListener("click", async () => {
       try {
-        rejectSuggestion();
+        const bridge = activeApiBridge();
+        if (bridge) {
+          const suggestion = latestSuggestionFor(selectedEngagementId);
+          if (!suggestion) throw new Error("Generate a local suggestion before rejecting.");
+          await bridge.request(`/api/reply-suggestions/${encodeURIComponent(suggestion.id)}/reject`, {
+            method: "POST",
+            body: {},
+          });
+          await syncBridge();
+        } else {
+          rejectSuggestion();
+        }
         setActionMessage("success", "Local reply suggestion rejected. The Inbox item still needs review.");
         renderEngagement();
       } catch (error) {
@@ -806,9 +878,17 @@
     });
     const mockButton = getElement("engagement-generate-mock");
     mockButton.hidden = !mockEngagementAllowed();
-    mockButton.addEventListener("click", () => {
+    mockButton.addEventListener("click", async () => {
       try {
-        const created = generateMockEngagement();
+        const bridge = activeApiBridge();
+        const result = bridge
+          ? await bridge.request("/api/engagement/mock", {
+            method: "POST",
+            body: { brand_profile_id: currentBrandProfileId() },
+          })
+          : null;
+        if (bridge) await syncBridge();
+        const created = bridge ? result.items : generateMockEngagement();
         const message = created.length
           ? `${created.length} clearly labeled mock engagement items generated locally. No comments were fetched and no replies were sent.`
           : "Mock engagement is already loaded. Existing stable demo records were kept without duplicates.";
@@ -820,6 +900,7 @@
       }
     });
     renderEngagement();
+    window.addEventListener("local-api-ready", renderEngagement);
     window.addEventListener("hashchange", () => {
       if (window.location.hash === "#engagement") renderEngagement();
     });

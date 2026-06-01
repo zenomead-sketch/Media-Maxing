@@ -106,7 +106,7 @@ class WebDraftsScreenTest(unittest.TestCase):
         ]
         self.assertNotIn("Publish", drafts_section)
         self.assertIn("Schedule", self.html)
-        self.assertIn("Temporary browser scheduling adapter", self.script)
+        self.assertIn("Local browser scheduling adapter", self.script)
         self.assertIn("local-social-ai-manager.scheduledPosts", self.script)
         self.assertIn("local-social-ai-manager.publishQueueItems", self.script)
         self.assertIn("No publishing was performed", self.script)

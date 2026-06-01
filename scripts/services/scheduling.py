@@ -576,6 +576,71 @@ class CalendarSchedulingService:
             actor_label=actor_label,
         )
 
+    def mark_needs_attention(
+        self,
+        scheduled_post_id: str,
+        *,
+        actor_label: str = "local_user",
+    ) -> ScheduledPost:
+        current = self._require_scheduled_post(scheduled_post_id)
+        queue = self._queue_for_scheduled_post(current.id)
+        if queue and queue.queueStatus not in EDITABLE_QUEUE_STATUSES:
+            raise CalendarSchedulingError(
+                "Only waiting or blocked queue items can be marked needs attention.",
+                ["queue_status_not_editable"],
+            )
+
+        now = _now_utc()
+        with closing(sqlite3.connect(self.database_path)) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.execute(
+                """
+                UPDATE scheduled_posts
+                SET status = 'needs_attention',
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (now, current.id),
+            )
+            if queue:
+                errors = list(queue.preflightErrors)
+                if "needs_attention" not in errors:
+                    errors.append("needs_attention")
+                connection.execute(
+                    """
+                    UPDATE publish_queue_items
+                    SET queue_status = 'blocked',
+                        preflight_status = 'blocked',
+                        preflight_errors_json = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (_json(errors), now, queue.id),
+                )
+            self._append_log(
+                connection,
+                entity_id=current.id,
+                action="marked_needs_attention",
+                actor_label=actor_label,
+                notes="Scheduled post marked needs attention locally.",
+                changed_fields={
+                    "previousStatus": current.status,
+                    "status": "needs_attention",
+                    "publishQueueItemId": queue.id if queue else None,
+                },
+                created_at=now,
+            )
+            self._update_generated_post_readiness(
+                connection,
+                current.generatedPostId,
+                current.scheduledFor,
+                "blocked",
+                now,
+            )
+            connection.commit()
+        return self._require_scheduled_post(current.id)
+
     def _set_scheduled_status(
         self,
         scheduled_post_id: str,

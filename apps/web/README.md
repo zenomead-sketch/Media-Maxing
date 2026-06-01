@@ -10,6 +10,10 @@ Available routes:
 - `index.html#brand`: first Brand Brain screen.
 - `index.html#settings`: first Settings screen.
 
-The Settings screen currently uses a temporary browser `localStorage` adapter. It mirrors the local SQLite settings shape, but it is not wired to the SQLite data layer until a web/API bridge exists.
+Run `python -m apps.api.local_server --database data/app.sqlite --port 8000`
+and open `http://127.0.0.1:8000` for the SQLite-backed browser path.
 
-The Brand Brain screen also uses a temporary browser `localStorage` adapter. It mirrors the seeded demo Brand Profile shape and should be replaced by the SQLite-backed Brand Brain service once a web/API bridge exists.
+The shell still uses browser adapters for rendering, but `api-client.js`
+hydrates them from SQLite and routes supported mutations through the local
+bridge. Opening `index.html` directly remains a browser-only `localStorage`
+demo fallback. See `docs/local-api-bridge.md`.

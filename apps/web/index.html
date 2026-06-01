@@ -385,7 +385,7 @@
             <div>
               <p class="panel-label">Business memory</p>
               <h2 id="brand-memory-name">Brightside Exterior Care Demo</h2>
-              <p id="brand-memory-summary">Temporary browser Brand Brain adapter until the web app is wired to SQLite.</p>
+              <p id="brand-memory-summary">Local Brand Brain memory. Through the localhost bridge, edits persist to SQLite.</p>
             </div>
             <div class="memory-stats" aria-label="Brand memory completeness">
               <div>
@@ -617,7 +617,7 @@
               <div class="section-header compact-header">
                 <div>
                   <h2 id="settings-general-heading">App preferences</h2>
-                  <p>Temporary browser settings adapter until the web app is wired to SQLite.</p>
+                  <p>Local settings adapter. Through the localhost bridge, changes persist to SQLite.</p>
                 </div>
                 <span class="card-status mock-mode">Local demo</span>
               </div>
@@ -979,7 +979,7 @@
             <div class="section-header compact-header">
               <div>
                 <h2>Build the generation request</h2>
-                <p>Temporary browser generation adapter — uses a deterministic JS mirror of the mock provider. Real backend wiring is a later step. <!-- TODO: wire to scripts/services/content_generation.py via a thin API in apps/api. --></p>
+                <p>Preview generation uses a deterministic browser mock. When launched through the localhost bridge, Save to Drafts validates the bundle and persists it to SQLite.</p>
               </div>
             </div>
 
@@ -1152,7 +1152,7 @@
                 <h2 id="calendar-heading">Scheduled content</h2>
                 <p id="calendar-range-label">Loading date range...</p>
               </div>
-              <span class="card-status mock-mode">Temporary browser Calendar adapter</span>
+              <span class="card-status mock-mode">Local Calendar adapter</span>
             </div>
 
             <div class="calendar-toolbar" aria-label="Calendar controls">
@@ -1346,7 +1346,7 @@
             <div class="section-header compact-header">
               <div>
                 <h2 id="queue-screen-heading">Local queue readiness</h2>
-                <p>Temporary browser Publish Queue adapter. SQLite-backed queue actions come through the future API bridge.</p>
+                <p>Local queue readiness. When launched through the localhost bridge, queue actions persist to SQLite. Real publishing stays disabled.</p>
               </div>
               <span class="card-status mock-mode">Manual/mock only</span>
             </div>
@@ -1557,7 +1557,7 @@
             <div class="section-header compact-header">
               <div>
                 <h2 id="engagement-inbox-heading">Local conversation review</h2>
-                <p>Temporary browser Engagement adapter. Mock and manual records stay on this device until the local API bridge is added.</p>
+                <p>Local Engagement adapter. Through the localhost bridge, mock and manual workflow records persist to SQLite on this device.</p>
               </div>
               <span class="card-status mock-mode">Mock/manual only</span>
             </div>
@@ -1787,7 +1787,7 @@
                 <h2 id="analytics-overview-heading">Performance overview</h2>
                 <p>Use filters to compare local snapshots. Manual and mock sources remain visibly distinct.</p>
               </div>
-              <span class="card-status mock-mode">Temporary browser adapter</span>
+              <span class="card-status mock-mode">Local browser adapter</span>
             </div>
 
             <div class="analytics-toolbar" aria-label="Analytics filters">
@@ -1966,7 +1966,7 @@
                 <h2 id="drafts-list-heading">Approval queue</h2>
                 <p>Approved drafts return to needs review after edits.</p>
               </div>
-              <span class="card-status mock-mode">Temporary browser adapter</span>
+              <span class="card-status mock-mode">Local browser adapter</span>
             </div>
 
             <div class="drafts-toolbar" aria-label="Draft filters">
@@ -2081,7 +2081,7 @@
                     <div class="section-header compact-header">
                       <div>
                         <h2 id="draft-schedule-heading">Schedule approved draft</h2>
-                        <p>Temporary browser scheduling adapter. Scheduling is local-only and does not publish.</p>
+                        <p>Local scheduling adapter. Through the localhost bridge, schedules persist to SQLite and never publish.</p>
                       </div>
                       <span class="card-status local-only">Local schedule</span>
                     </div>
@@ -2159,6 +2159,7 @@
 
       </main>
     </div>
+    <script src="./api-client.js"></script>
     <script src="./settings.js"></script>
     <script src="./generate.js"></script>
     <script src="./analytics.js"></script>

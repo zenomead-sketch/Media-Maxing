@@ -6,7 +6,10 @@ It does not publish to real social platforms, call social APIs, require connecte
 
 ## What The Queue Shows
 
-The web app includes a first static Publish Queue screen backed by a temporary browser adapter. Until the API bridge exists, this screen uses localStorage demo records that mirror the SQLite tables:
+The web app includes a static Publish Queue screen. When launched through the
+localhost bridge, its preflight, mock completion, manual completion, cancel,
+and export actions persist through the SQLite services. Opening the HTML file
+directly uses localStorage demo records that mirror the SQLite tables:
 
 - `scheduled_posts`
 - `publish_queue_items`
@@ -39,7 +42,8 @@ Supported local queue statuses:
 
 ## Preflight
 
-The screen can run a local preflight check now for the selected item. The browser adapter mirrors the backend preflight rules until an API bridge exists.
+The screen can run a local preflight check for the selected item. Through the
+localhost bridge, it delegates to the backend preflight rules.
 
 The backend source of truth is `scripts/services/preflight.py`, documented in `docs/platform-preflight-matrix.md`.
 
@@ -113,7 +117,10 @@ Marking an item manually exported:
 
 The backend implementation is `PublishQueueService.mark_manually_exported`. It requires warning-only or passed preflight and keeps this as a local audit state only.
 
-The screen can also download a browser-side package mirror with caption, hashtags, CTA, media IDs, and preflight notes. It does not include secrets. Until an API bridge exists, the Python service remains the source of truth for full folder exports.
+Through the localhost bridge, the screen creates the full local folder export
+through the Python service. In direct-file fallback mode, it downloads a
+browser-side package mirror with caption, hashtags, CTA, media IDs, and
+preflight notes. Neither path includes secrets.
 
 See `docs/manual-export.md` for the full package structure and command.
 

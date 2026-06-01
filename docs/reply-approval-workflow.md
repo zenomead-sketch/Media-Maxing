@@ -41,7 +41,10 @@ Critical flags include invented pricing, invented availability, unsupported guar
 
 ## Browser Demo
 
-The static Engagement Inbox mirrors this workflow with `localStorage` until the local API bridge is added. Its data stays on the current device and is clearly labeled mock/manual.
+The static Engagement Inbox mirrors this workflow. Through the localhost
+bridge, actions persist to SQLite. Direct-file mode remains a `localStorage`
+demo fallback. Data stays on the current device and mock/manual provenance
+remains visible.
 
 ## Limits
 

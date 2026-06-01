@@ -115,7 +115,7 @@ class WebEngagementScreenTest(unittest.TestCase):
             with self.subTest(function_name=function_name):
                 self.assertIn(f"function {function_name}", self.script)
 
-        self.assertIn("Temporary browser Engagement adapter", self.script)
+        self.assertIn("Local browser Engagement adapter", self.script)
         self.assertIn("local-social-ai-manager.engagementItems", self.script)
         self.assertIn("local-social-ai-manager.replySuggestions", self.script)
         self.assertIn("local-social-ai-manager.replyApprovals", self.script)

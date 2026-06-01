@@ -80,19 +80,23 @@ Scheduling remains local-only. `waiting`, `queued`, `completed`, or similar loca
 
 ## Current Web Calendar Screen
 
-The static web app includes a first Calendar screen with Week, Month, and List views. Until an API bridge exists, it uses a temporary browser adapter backed by localStorage and mirrors the local scheduling service behavior for demo records.
+The static web app includes a Calendar screen with Week, Month, and List views.
+Through the localhost bridge, scheduling mutations persist through the local
+SQLite scheduling service. Opening the HTML file directly uses a temporary
+localStorage demo fallback.
 
 The screen can:
 
 - Show local scheduled post cards with platform, time, status, caption preview, media count, safety flag count, business name, and queue status.
 - Filter by platform and scheduled post status.
 - Open a detail panel with schedule metadata, caption snapshot, linked media IDs, draft ID, queue status, preflight status, notes, and timestamps.
-- Reschedule waiting or blocked queue items in the browser demo.
-- Cancel unprocessed scheduled posts in the browser demo.
+- Reschedule waiting or blocked queue items.
+- Cancel unprocessed scheduled posts.
 - Mark a scheduled item as needing attention.
 - Copy the caption for manual posting.
 
-The screen does not publish anything, does not call real social APIs, and does not create operating-system scheduled tasks. The "Schedule approved drafts" button points users back to Drafts until the full approved-draft-to-calendar workflow is built.
+The screen does not publish anything, does not call real social APIs, and does
+not create operating-system scheduled tasks.
 
 ## Publish Queue Screen
 
@@ -104,7 +108,8 @@ These actions update local demo records only. They do not call social APIs and d
 
 ## Scheduling From Drafts
 
-The Drafts screen now includes a local Schedule action for approved drafts. The static browser implementation mirrors the Python scheduling service until the API bridge is available.
+The Drafts screen includes a local Schedule action for approved drafts.
+Through the localhost bridge, it uses the Python scheduling service.
 
 Scheduling from Drafts:
 
@@ -116,8 +121,8 @@ Scheduling from Drafts:
 - Requires a date, time, and timezone.
 - Requires future date/time unless the app is in development mode and the user explicitly confirms a past test item.
 - Snapshots caption, hashtags, CTA, hook/headline, alt text, safety flags, platform, and media IDs.
-- Creates a local `scheduled_posts` browser record.
-- Creates a local `publish_queue_items` browser record with `queueStatus = waiting`.
+- Creates a local SQLite `scheduled_posts` record.
+- Creates a local SQLite `publish_queue_items` record with `queueStatus = waiting`.
 - Creates a local approval/audit log entry.
 
 Duplicate protection checks for an existing non-canceled schedule for the same draft at the same scheduled time and also disables the confirm button while scheduling is in progress.

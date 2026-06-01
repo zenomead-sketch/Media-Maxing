@@ -66,7 +66,7 @@ class WebCalendarScreenTest(unittest.TestCase):
             with self.subTest(function_name=function_name):
                 self.assertIn(f"function {function_name}", self.script)
 
-        self.assertIn("Temporary browser Calendar adapter", self.script)
+        self.assertIn("Local Calendar adapter", self.html)
         self.assertIn("no real publishing", self.script.lower())
         self.assertIn("local-social-ai-manager.scheduledPosts", self.script)
         self.assertIn("local-social-ai-manager.publishQueueItems", self.script)

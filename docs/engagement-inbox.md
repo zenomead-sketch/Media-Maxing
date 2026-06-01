@@ -35,7 +35,11 @@ python -m scripts.services.engagement --database data/app.sqlite --brand-profile
 
 Open `apps/web/index.html#engagement` to use the current Engagement Inbox screen.
 
-The static web shell does not have a browser-to-SQLite API bridge yet. For UI development, `apps/web/engagement.js` uses a temporary `localStorage` adapter with the same eight clearly fake scenarios. Click **Generate mock engagement** to add them. Stable IDs prevent duplicate browser fixtures.
+When the static web shell is launched through the localhost bridge,
+`apps/web/engagement.js` persists mock ingestion, inbox status updates, reply
+suggestions, and local reply approvals to SQLite. Opening the HTML file
+directly uses a temporary `localStorage` demo fallback with the same eight
+clearly fake scenarios. Stable IDs prevent duplicate fixtures.
 
 The screen supports:
 

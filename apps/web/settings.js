@@ -231,6 +231,18 @@
     selectedItemId: null,
   };
 
+  function activeApiBridge() {
+    return window.localApiBridge?.available ? window.localApiBridge : null;
+  }
+
+  function persistThroughApi(path, body) {
+    const bridge = activeApiBridge();
+    if (!bridge) return;
+    bridge.request(path, { method: "PATCH", body }).catch((error) => {
+      console.warn("local-api: SQLite persistence failed", error);
+    });
+  }
+
   const defaultSettings = {
     appName: "Local Social AI Manager",
     appEnvironment: "development",
@@ -525,8 +537,8 @@
 
   const settingsAdapter = {
     load() {
-      // TODO: Replace this temporary browser settings adapter with a call to the
-      // local SQLite-backed settings data layer once the web/API bridge exists.
+      // api-client.js hydrates this adapter from SQLite when the localhost
+      // bridge is active. Direct-file mode keeps a browser demo fallback.
       const rawSettings = window.localStorage.getItem(STORAGE_KEY);
       if (!rawSettings) {
         this.save(defaultSettings);
@@ -550,6 +562,7 @@
         updatedAt: now,
       };
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextSettings));
+      persistThroughApi("/api/settings", settings);
       return nextSettings;
     },
 
@@ -573,8 +586,8 @@
 
   const brandBrainAdapter = {
     load() {
-      // TODO: Replace this temporary browser Brand Brain adapter with a call to
-      // the local SQLite-backed brand profile service once the web/API bridge exists.
+      // api-client.js hydrates Brand Brain from SQLite when the localhost
+      // bridge is active. Direct-file mode keeps a browser demo fallback.
       const rawProfile = window.localStorage.getItem(BRAND_STORAGE_KEY);
       if (!rawProfile) {
         this.save(defaultBrandProfile);
@@ -599,6 +612,7 @@
         updatedAt: now,
       };
       window.localStorage.setItem(BRAND_STORAGE_KEY, JSON.stringify(nextProfile));
+      persistThroughApi(`/api/brand-profiles/${encodeURIComponent(nextProfile.id)}`, profile);
       return nextProfile;
     },
 
@@ -622,8 +636,8 @@
 
   const mediaLibraryAdapter = {
     load() {
-      // TODO: Replace this temporary browser Media Library adapter with a call to
-      // the local SQLite-backed media_assets service once the web/API bridge exists.
+      // api-client.js hydrates media records from SQLite when the localhost
+      // bridge is active. Direct-file mode keeps a browser demo fallback.
       const rawMedia = window.localStorage.getItem(MEDIA_STORAGE_KEY);
       if (!rawMedia) {
         this.save(defaultMediaAssets);
@@ -657,9 +671,8 @@
   };
 
   function loadScheduledPosts() {
-    // TODO: Replace this Temporary browser Calendar adapter with a call to
-    // scripts/services/scheduling.CalendarSchedulingService through apps/api.
-    // The browser mirror persists local demo rows only; no real publishing occurs here.
+    // api-client.js hydrates Calendar rows from SQLite when the localhost
+    // bridge is active. Direct-file mode keeps a local demo fallback.
     const rawPosts = window.localStorage.getItem(SCHEDULED_POSTS_KEY);
     if (!rawPosts) {
       const demo = buildDefaultCalendarDemo();
@@ -738,10 +751,9 @@
   }
 
   function loadConnectedAccounts() {
-    // TODO: Replace this temporary browser Connected Accounts adapter with
-    // apps/api/connect_handlers.py once the web/API bridge exists. This mirror
-    // stores safe mock account metadata only; no platform secret values are
-    // stored, shown, or sent anywhere from the browser.
+    // api-client.js hydrates safe DTOs from SQLite when the localhost bridge
+    // is active. Direct-file mode stores safe mock metadata only; no platform
+    // secret values are stored, shown, or sent anywhere from the browser.
     const rawAccounts = window.localStorage.getItem(CONNECTED_ACCOUNTS_KEY);
     if (!rawAccounts) {
       return [];
@@ -809,7 +821,7 @@
       errorCode: details?.errorCode || "",
       errorMessage: details?.errorMessage || "",
       providerResponse: {
-        source: "Temporary browser Publish Queue adapter",
+        source: "Local browser Publish Queue adapter",
         realPublishing: false,
         note: details?.note || "Local-only queue action. Future real publishing remains disabled.",
       },
@@ -1594,7 +1606,7 @@
     return "";
   }
 
-  function saveMediaMetadata() {
+  async function saveMediaMetadata() {
     const metadata = collectMediaMetadataFromForm();
     const validationMessage = validateMediaMetadata(metadata);
     if (validationMessage) {
@@ -1612,10 +1624,32 @@
         ...metadata,
       });
     });
-    mediaLibraryAdapter.save(nextAssets);
+    const bridge = activeApiBridge();
+    if (bridge) {
+      try {
+        const updates = { ...metadata };
+        delete updates.id;
+        delete updates.status;
+        await bridge.request(`/api/media/${encodeURIComponent(metadata.id)}`, {
+          method: "PATCH",
+          body: updates,
+        });
+        await bridge.sync();
+      } catch (error) {
+        setMediaMetadataMessage("error", error.message || "Media metadata could not be saved to local SQLite.");
+        return;
+      }
+    } else {
+      mediaLibraryAdapter.save(nextAssets);
+    }
     renderMediaLibrary();
     openMediaDetailPanel(metadata.id);
-    setMediaMetadataMessage("success", "Media metadata saved locally for this browser demo.");
+    setMediaMetadataMessage(
+      "success",
+      bridge
+        ? "Media metadata saved to local SQLite."
+        : "Media metadata saved locally for this browser demo.",
+    );
   }
 
   function startOfDay(date) {
@@ -2237,7 +2271,7 @@
     }
   }
 
-  function mockConnectPlatform(platform) {
+  async function mockConnectPlatform(platform) {
     const config = platformConfig(platform);
     if (!mockConnectPlatformIds.includes(config.id)) {
       setConnectedMessage("error", `${config.label} is scaffolded only. Mock connect is available only for mock-ready connectors in this build.`);
@@ -2250,6 +2284,25 @@
     );
     if (existing) {
       setConnectedMessage("error", `${config.label} already has an active mock connection.`);
+      return;
+    }
+
+    const bridge = activeApiBridge();
+    if (bridge) {
+      try {
+        const result = await bridge.request(`/api/connect/${encodeURIComponent(config.id)}/mock-connect`, {
+          method: "POST",
+          body: {},
+        });
+        if (!result.success) {
+          throw new Error(result.message || "Mock connection could not be created.");
+        }
+        await bridge.sync();
+        setConnectedMessage("success", `${config.label} mock connection saved to local SQLite. Real publishing remains disabled.`);
+        renderConnectedAccounts();
+      } catch (error) {
+        setConnectedMessage("error", error.message || "Mock connection could not be created.");
+      }
       return;
     }
 
@@ -2285,7 +2338,7 @@
     renderConnectedAccounts();
   }
 
-  function validateConnectedAccount(accountId) {
+  async function validateConnectedAccount(accountId) {
     const accounts = loadConnectedAccounts();
     const account = accounts.find((item) => item.id === accountId);
     if (!account) {
@@ -2294,6 +2347,22 @@
     }
     if (account.connectionStatus === "disconnected") {
       setConnectedMessage("error", "Disconnected accounts cannot be checked until they are reconnected.");
+      return;
+    }
+
+    const bridge = activeApiBridge();
+    if (bridge) {
+      try {
+        await bridge.request(`/api/connect/${encodeURIComponent(account.platform)}/validate`, {
+          method: "POST",
+          body: { socialAccountId: account.id },
+        });
+        await bridge.sync();
+        setConnectedMessage("success", `${platformConfig(account.platform).label} connection checked through the local scaffold. No real API was called.`);
+        renderConnectedAccounts();
+      } catch (error) {
+        setConnectedMessage("error", error.message || "Local connection check could not be completed.");
+      }
       return;
     }
 
@@ -2367,7 +2436,7 @@
     renderConnectedAccounts();
   }
 
-  function disconnectConnectedAccount(accountId) {
+  async function disconnectConnectedAccount(accountId) {
     const accounts = loadConnectedAccounts();
     const account = accounts.find((item) => item.id === accountId);
     if (!account) {
@@ -2375,6 +2444,24 @@
       return;
     }
     if (!window.confirm("Disconnect this mock account locally? The record stays in audit history.")) {
+      return;
+    }
+    const bridge = activeApiBridge();
+    if (bridge) {
+      try {
+        const result = await bridge.request(`/api/connect/${encodeURIComponent(account.platform)}/disconnect`, {
+          method: "POST",
+          body: { socialAccountId: account.id },
+        });
+        if (!result.success) {
+          throw new Error(result.message || "Local disconnect could not be completed.");
+        }
+        await bridge.sync();
+        setConnectedMessage("success", `${platformConfig(account.platform).label} mock account disconnected in local SQLite.`);
+        renderConnectedAccounts();
+      } catch (error) {
+        setConnectedMessage("error", error.message || "Local disconnect could not be completed.");
+      }
       return;
     }
     const now = new Date().toISOString();
@@ -2787,9 +2874,24 @@
     return nextQueue;
   }
 
-  function runSelectedQueuePreflight() {
+  async function runSelectedQueuePreflight() {
     const item = selectedQueueItem();
     if (!item) {
+      return;
+    }
+    const bridge = activeApiBridge();
+    if (bridge) {
+      try {
+        await bridge.request(`/api/publish-queue/${encodeURIComponent(item.id)}/preflight`, {
+          method: "POST",
+          body: {},
+        });
+        await bridge.sync();
+        setQueueMessage("success", "Preflight recorded in local SQLite. No external API was called.");
+        renderPublishQueue();
+      } catch (error) {
+        setQueueMessage("error", error.message || "Local SQLite preflight could not be completed.");
+      }
       return;
     }
     const post = scheduledPostForQueueItem(item);
@@ -2833,13 +2935,28 @@
     renderPublishQueue();
   }
 
-  function markSelectedQueueManualExported() {
+  async function markSelectedQueueManualExported() {
     const item = selectedQueueItem();
     if (!item) {
       return;
     }
     if (["mock_published", "manually_exported", "canceled", "skipped"].includes(item.queueStatus)) {
       setQueueMessage("error", "This queue item is already processed or canceled.");
+      return;
+    }
+    const bridge = activeApiBridge();
+    if (bridge) {
+      try {
+        await bridge.request(`/api/publish-queue/${encodeURIComponent(item.id)}/mark-manually-exported`, {
+          method: "POST",
+          body: {},
+        });
+        await bridge.sync();
+        setQueueMessage("success", "Manual export recorded in local SQLite. No external API was called.");
+        renderPublishQueue();
+      } catch (error) {
+        setQueueMessage("error", error.message || "Manual export completion could not be recorded.");
+      }
       return;
     }
     const post = scheduledPostForQueueItem(item);
@@ -2858,7 +2975,7 @@
     renderPublishQueue();
   }
 
-  function mockPublishSelectedQueueItem() {
+  async function mockPublishSelectedQueueItem() {
     const item = selectedQueueItem();
     if (!item) {
       return;
@@ -2873,6 +2990,21 @@
     }
     if (item.preflightStatus !== "passed" || item.queueStatus !== "ready") {
       setQueueMessage("error", "Mock publish requires passed preflight and ready queue status.");
+      return;
+    }
+    const bridge = activeApiBridge();
+    if (bridge) {
+      try {
+        await bridge.request(`/api/publish-queue/${encodeURIComponent(item.id)}/mock-publish`, {
+          method: "POST",
+          body: {},
+        });
+        await bridge.sync();
+        setQueueMessage("success", "Mock publish recorded in local SQLite. No external API was called.");
+        renderPublishQueue();
+      } catch (error) {
+        setQueueMessage("error", error.message || "Mock publish could not be recorded.");
+      }
       return;
     }
     const post = scheduledPostForQueueItem(item);
@@ -2891,7 +3023,7 @@
     renderPublishQueue();
   }
 
-  function cancelSelectedQueueItem() {
+  async function cancelSelectedQueueItem() {
     const item = selectedQueueItem();
     if (!item) {
       return;
@@ -2900,6 +3032,21 @@
       return;
     }
     const post = scheduledPostForQueueItem(item);
+    const bridge = activeApiBridge();
+    if (bridge && post) {
+      try {
+        await bridge.request(`/api/calendar/${encodeURIComponent(post.id)}/cancel`, {
+          method: "POST",
+          body: { reason: "Queue item canceled locally by owner." },
+        });
+        await bridge.sync();
+        setQueueMessage("success", "Queue item canceled in local SQLite.");
+        renderPublishQueue();
+      } catch (error) {
+        setQueueMessage("error", error.message || "Queue item could not be canceled.");
+      }
+      return;
+    }
     const shouldCancelScheduled = post && !["completed", "canceled"].includes(post.status);
     updateQueueAndScheduled(
       item,
@@ -2928,7 +3075,7 @@
       .catch(() => setQueueMessage("error", "Could not copy caption."));
   }
 
-  function exportSelectedQueuePackage() {
+  async function exportSelectedQueuePackage() {
     const item = selectedQueueItem();
     if (!item) {
       return;
@@ -2943,6 +3090,19 @@
     }
     if (["errors", "blocked"].includes(item.preflightStatus)) {
       setQueueMessage("error", "Resolve failed preflight before exporting a manual package.");
+      return;
+    }
+    const bridge = activeApiBridge();
+    if (bridge) {
+      try {
+        const result = await bridge.request(`/api/publish-queue/${encodeURIComponent(item.id)}/export-package`, {
+          method: "POST",
+          body: {},
+        });
+        setQueueMessage("success", `Manual export package created locally at ${result.exportPath}. Queue status was not changed.`);
+      } catch (error) {
+        setQueueMessage("error", error.message || "Manual export package could not be created.");
+      }
       return;
     }
     const post = scheduledPostForQueueItem(item);
@@ -3206,7 +3366,7 @@
     renderCalendar();
   }
 
-  function rescheduleSelectedPost(event) {
+  async function rescheduleSelectedPost(event) {
     event.preventDefault();
     const post = selectedCalendarPost();
     if (!post) {
@@ -3230,6 +3390,28 @@
     const nextScheduledFor = parsed.toISOString();
     const timezone = getElement("calendar-reschedule-timezone").value.trim() || defaultSettings.defaultTimezone;
     const notes = getElement("calendar-notes").value.trim();
+    const bridge = activeApiBridge();
+    if (bridge) {
+      try {
+        await bridge.request(`/api/calendar/${encodeURIComponent(post.id)}/reschedule`, {
+          method: "POST",
+          body: {
+            scheduled_for: nextScheduledFor,
+            timezone,
+          },
+        });
+        await bridge.request(`/api/calendar/${encodeURIComponent(post.id)}/notes`, {
+          method: "POST",
+          body: { user_notes: notes },
+        });
+        await bridge.sync();
+        setCalendarMessage("success", "Scheduled post rescheduled in local SQLite.");
+        renderCalendar();
+      } catch (error) {
+        setCalendarMessage("error", error.message || "Scheduled post could not be rescheduled.");
+      }
+      return;
+    }
     if (queue) {
       const queueItems = loadPublishQueueItems().map((item) =>
         item.id === queue.id
@@ -3256,7 +3438,7 @@
     setCalendarMessage("success", "Scheduled post rescheduled locally.");
   }
 
-  function cancelSelectedPost() {
+  async function cancelSelectedPost() {
     const post = selectedCalendarPost();
     if (!post) {
       return;
@@ -3267,6 +3449,21 @@
     const queue = findQueueItemForPost(post);
     if (queue && processedQueueStatuses.includes(queue.queueStatus)) {
       setCalendarMessage("error", "Processed queue items cannot be canceled from Calendar.");
+      return;
+    }
+    const bridge = activeApiBridge();
+    if (bridge) {
+      try {
+        await bridge.request(`/api/calendar/${encodeURIComponent(post.id)}/cancel`, {
+          method: "POST",
+          body: { reason: "Scheduled post canceled locally by owner." },
+        });
+        await bridge.sync();
+        setCalendarMessage("success", "Scheduled post canceled in local SQLite.");
+        renderCalendar();
+      } catch (error) {
+        setCalendarMessage("error", error.message || "Scheduled post could not be canceled.");
+      }
       return;
     }
     const now = new Date().toISOString();
@@ -3291,9 +3488,24 @@
     setCalendarMessage("success", "Scheduled post canceled locally.");
   }
 
-  function markSelectedNeedsAttention() {
+  async function markSelectedNeedsAttention() {
     const post = selectedCalendarPost();
     if (!post) {
+      return;
+    }
+    const bridge = activeApiBridge();
+    if (bridge) {
+      try {
+        await bridge.request(`/api/calendar/${encodeURIComponent(post.id)}/needs-attention`, {
+          method: "POST",
+          body: {},
+        });
+        await bridge.sync();
+        setCalendarMessage("success", "Scheduled post marked needs attention in local SQLite.");
+        renderCalendar();
+      } catch (error) {
+        setCalendarMessage("error", error.message || "Scheduled post could not be marked needs attention.");
+      }
       return;
     }
     const queue = findQueueItemForPost(post);
@@ -3727,5 +3939,17 @@
     setupSocialSetup();
     setupSettingsForm();
     setupBrandBrainForm();
+    window.addEventListener("local-api-ready", () => {
+      renderMediaLibrary();
+      renderCalendar();
+      renderPublishQueue();
+      renderConnectedAccounts();
+      if (routeFromHash() === "settings") {
+        applySettingsToForm(settingsAdapter.load());
+      }
+      if (routeFromHash() === "brand") {
+        applyBrandProfileToForm(brandBrainAdapter.load());
+      }
+    });
   });
 })();

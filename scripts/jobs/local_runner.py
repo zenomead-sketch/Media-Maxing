@@ -224,6 +224,41 @@ class LocalJobRunner:
             attemptsCreated=attempts,
         )
 
+    def preflight_queue_item(
+        self,
+        queue_item_id: str,
+        *,
+        now: str | datetime | None = None,
+    ) -> PreflightResult:
+        """Run and persist local preflight for one queue item on demand."""
+
+        now_dt = _coerce_datetime(now)
+        queue_row = self._queue_row_by_id(queue_item_id)
+        scheduled_row = self._scheduled_row(queue_row["scheduled_post_id"])
+        if scheduled_row is None:
+            result = PreflightResult(
+                eligible=False,
+                errors=["missing_scheduled_post: Queue item has no scheduled post."],
+            )
+            self._apply_queue_only_preflight_result(
+                queue_row=queue_row,
+                result=result,
+                now_dt=now_dt,
+            )
+            return result
+
+        result = self._run_preflight_for_scheduled_row(scheduled_row)
+        self._apply_preflight_result(
+            scheduled_row=scheduled_row,
+            result=result,
+            now_dt=now_dt,
+            update_scheduled_status=(
+                _parse_iso(scheduled_row["scheduled_for"]) <= now_dt
+                and scheduled_row["status"] == "scheduled"
+            ),
+        )
+        return result
+
     def mark_missed_scheduled_posts(
         self,
         *,
@@ -305,6 +340,17 @@ class LocalJobRunner:
             info=result.info,
             requirementVersion=result.requirementVersion,
         )
+
+    def _queue_row_by_id(self, queue_item_id: str) -> sqlite3.Row:
+        with closing(sqlite3.connect(self.database_path)) as connection:
+            connection.row_factory = sqlite3.Row
+            row = connection.execute(
+                "SELECT * FROM publish_queue_items WHERE id = ?",
+                (queue_item_id,),
+            ).fetchone()
+        if row is None:
+            raise ValueError(f"Publish queue item {queue_item_id!r} does not exist.")
+        return row
 
     def _apply_preflight_result(
         self,

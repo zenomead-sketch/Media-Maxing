@@ -4,9 +4,10 @@
 // scripts/ai/safety.py inside the browser so the static demo can produce
 // realistic, deterministic mock drafts without any backend.
 //
-// TODO: replace the local generator below with a thin HTTP call into
-// scripts/services/content_generation.generate_content once apps/api is
-// implemented. Keep the JS shape compatible with the Python schemas.
+// Preview generation remains a deterministic browser mirror. When the
+// localhost bridge is active, Save to Drafts sends the bundle through Python
+// schema validation and SQLite persistence. Direct-file mode stays a
+// localStorage demo fallback.
 
 (function () {
   const BRAND_KEY = "local-social-ai-manager.brandBrain";
@@ -36,6 +37,10 @@
     "brand_mismatch",
     "platform_policy_risk",
   ]);
+
+  function activeApiBridge() {
+    return window.localApiBridge?.available ? window.localApiBridge : null;
+  }
 
   const PLATFORMS = [
     { id: "instagram", label: "Instagram" },
@@ -873,7 +878,7 @@
       .map((tag) => (tag.startsWith("#") ? tag : `#${tag}`));
   }
 
-  function saveDraftEdits(event) {
+  async function saveDraftEdits(event) {
     event.preventDefault();
     const draft = selectedDraft();
     if (!draft) return;
@@ -899,29 +904,55 @@
       status: requiresReapproval ? "needs_review" : previousStatus,
       updatedAt: new Date().toISOString(),
     };
-    appendApprovalLog(
-      draft.id,
-      requiresReapproval ? "edited_requires_reapproval" : "edited",
-      requiresReapproval
-        ? "Approved drafts return to needs_review after edits."
-        : "Draft edited locally.",
-      {
-        editedFields: [
-          "headline",
-          "hook",
-          "caption",
-          "shortCaption",
-          "longCaption",
-          "callToAction",
-          "hashtags",
-          "altText",
-          "notes",
-        ],
-        previousApprovalStatus: previousStatus,
-        approvalStatus: updatedDraft.approvalStatus,
+    const bridge = activeApiBridge();
+    if (bridge) {
+      try {
+        await bridge.request(`/api/drafts/${encodeURIComponent(draft.id)}`, {
+          method: "PATCH",
+          body: {
+            headline: updatedDraft.headline,
+            hook: updatedDraft.hook,
+            caption: updatedDraft.caption,
+            shortCaption: updatedDraft.shortCaption,
+            longCaption: updatedDraft.longCaption,
+            callToAction: updatedDraft.callToAction,
+            hashtags: updatedDraft.hashtags,
+            altText: updatedDraft.altText,
+            notes: updatedDraft.notes,
+          },
+        });
+        await bridge.sync();
+        renderDraftsList();
+        renderSelectedDraft();
+      } catch (error) {
+        setDraftMessage("error", error.message || "Draft edits could not be saved to local SQLite.");
+        return;
       }
-    );
-    replaceDraft(updatedDraft);
+    } else {
+      appendApprovalLog(
+        draft.id,
+        requiresReapproval ? "edited_requires_reapproval" : "edited",
+        requiresReapproval
+          ? "Approved drafts return to needs_review after edits."
+          : "Draft edited locally.",
+        {
+          editedFields: [
+            "headline",
+            "hook",
+            "caption",
+            "shortCaption",
+            "longCaption",
+            "callToAction",
+            "hashtags",
+            "altText",
+            "notes",
+          ],
+          previousApprovalStatus: previousStatus,
+          approvalStatus: updatedDraft.approvalStatus,
+        }
+      );
+      replaceDraft(updatedDraft);
+    }
     setDraftMessage(
       "success",
       requiresReapproval
@@ -930,7 +961,7 @@
     );
   }
 
-  function setSelectedDraftStatus(status, action, notes) {
+  async function setSelectedDraftStatus(status, action, notes) {
     const draft = selectedDraft();
     if (!draft || !APPROVAL_STATUSES.includes(status)) return;
     const updatedDraft = {
@@ -939,12 +970,31 @@
       status,
       updatedAt: new Date().toISOString(),
     };
-    appendApprovalLog(draft.id, action, notes || "", {
-      previousApprovalStatus: draft.approvalStatus,
-      approvalStatus: status,
-      reason: notes || "",
-    });
-    replaceDraft(updatedDraft);
+    const bridge = activeApiBridge();
+    if (bridge) {
+      try {
+        await bridge.request(`/api/drafts/${encodeURIComponent(draft.id)}/approval`, {
+          method: "POST",
+          body: {
+            action: action === "revision_requested" ? "request_revision" : action,
+            reason: notes || "",
+          },
+        });
+        await bridge.sync();
+        renderDraftsList();
+        renderSelectedDraft();
+      } catch (error) {
+        setDraftMessage("error", error.message || "Draft approval action could not be saved to local SQLite.");
+        return;
+      }
+    } else {
+      appendApprovalLog(draft.id, action, notes || "", {
+        previousApprovalStatus: draft.approvalStatus,
+        approvalStatus: status,
+        reason: notes || "",
+      });
+      replaceDraft(updatedDraft);
+    }
     setDraftMessage("success", `Draft marked ${status}. No publishing or scheduling was performed.`);
   }
 
@@ -1117,7 +1167,7 @@
         eligible: true,
         errors: [],
         warnings: ["manual_export_required"],
-        source: "Temporary browser scheduling adapter",
+        source: "Local browser scheduling adapter",
         realPublishing: false,
       },
       createdAt: now,
@@ -1151,7 +1201,7 @@
 
   let scheduleInProgress = false;
 
-  function confirmDraftSchedule(event) {
+  async function confirmDraftSchedule(event) {
     event.preventDefault();
     if (scheduleInProgress) return;
     const draft = selectedDraft();
@@ -1195,28 +1245,44 @@
     if (confirmButton) confirmButton.disabled = true;
     try {
       const notes = $("draft-schedule-notes").value.trim();
-      const scheduledPost = createScheduledPostFromDraft(draft, scheduledFor, timezone, notes);
-      const queueItem = createPublishQueueItemFromDraft(draft, scheduledPost, timezone);
-      scheduledPost.publishQueueItemId = queueItem.id;
-      saveScheduledPosts(loadScheduledPosts().concat(scheduledPost));
-      savePublishQueueItems(loadPublishQueueItems().concat(queueItem));
-      appendScheduleAuditLog(
-        scheduledPost.id,
-        "scheduled",
-        "Draft scheduled locally from Drafts. No publishing was performed.",
-        {
-          generatedPostId: draft.id,
-          publishQueueItemId: queueItem.id,
-          scheduledFor,
-          timezone,
-          status: "scheduled",
-          queueStatus: "waiting",
-        },
-      );
+      const bridge = activeApiBridge();
+      if (bridge) {
+        await bridge.request(`/api/drafts/${encodeURIComponent(draft.id)}/schedule`, {
+          method: "POST",
+          body: {
+            scheduled_for: scheduledFor,
+            timezone,
+            user_notes: notes,
+            allow_past_test_item: new Date(scheduledFor) <= new Date(),
+          },
+        });
+        await bridge.sync();
+      } else {
+        const scheduledPost = createScheduledPostFromDraft(draft, scheduledFor, timezone, notes);
+        const queueItem = createPublishQueueItemFromDraft(draft, scheduledPost, timezone);
+        scheduledPost.publishQueueItemId = queueItem.id;
+        saveScheduledPosts(loadScheduledPosts().concat(scheduledPost));
+        savePublishQueueItems(loadPublishQueueItems().concat(queueItem));
+        appendScheduleAuditLog(
+          scheduledPost.id,
+          "scheduled",
+          "Draft scheduled locally from Drafts. No publishing was performed.",
+          {
+            generatedPostId: draft.id,
+            publishQueueItemId: queueItem.id,
+            scheduledFor,
+            timezone,
+            status: "scheduled",
+            queueStatus: "waiting",
+          },
+        );
+      }
       const calendarLink = $("draft-schedule-calendar-link");
       if (calendarLink) calendarLink.hidden = false;
       setDraftMessage("success", "Draft scheduled locally. No publishing was performed. View it in Calendar.");
       window.dispatchEvent(new StorageEvent("storage", { key: SCHEDULED_POSTS_KEY }));
+    } catch (error) {
+      setDraftMessage("error", error.message || "Draft could not be scheduled in local SQLite.");
     } finally {
       scheduleInProgress = false;
       if (confirmButton) confirmButton.disabled = false;
@@ -1305,9 +1371,15 @@
     }, 16);
   }
 
-  function handleSaveToDrafts() {
+  let draftSaveInProgress = false;
+
+  async function handleSaveToDrafts() {
     if (!lastBundle || !lastBundle.posts.length) {
       setSaveStatus("error", "Nothing to save. Generate drafts first.");
+      return;
+    }
+    if (draftSaveInProgress) {
+      setSaveStatus("error", "Draft save is already in progress.");
       return;
     }
     const existing = loadDrafts();
@@ -1316,6 +1388,33 @@
       `browser-save-${lastBundle.brandProfileId}-${lastBundle.createdAt || "unknown"}`;
     if (existing.some((draft) => draft.saveRequestId === saveRequestId)) {
       setSaveStatus("error", "These generated drafts were already saved. Generate a new preview before saving again.");
+      return;
+    }
+    const bridge = activeApiBridge();
+    if (bridge) {
+      const saveButton = $("generate-save-drafts");
+      draftSaveInProgress = true;
+      if (saveButton) saveButton.disabled = true;
+      try {
+        const additions = await bridge.request("/api/drafts/save-generated", {
+          method: "POST",
+          body: {
+            bundle: lastBundle,
+            save_request_id: saveRequestId,
+          },
+        });
+        await bridge.sync();
+        setSaveStatus(
+          "success",
+          `Saved ${additions.length} draft${additions.length === 1 ? "" : "s"} to local SQLite. Drafts list updated.`,
+        );
+        renderDraftsList();
+      } catch (error) {
+        setSaveStatus("error", error.message || "Generated drafts could not be saved to local SQLite.");
+      } finally {
+        draftSaveInProgress = false;
+        if (saveButton) saveButton.disabled = false;
+      }
       return;
     }
     const savedAt = new Date().toISOString();
@@ -1436,6 +1535,11 @@
         renderBrandSummary();
         renderMediaGrid();
       }
+    });
+    window.addEventListener("local-api-ready", () => {
+      renderBrandSummary();
+      renderMediaGrid();
+      renderDraftsList();
     });
   }
 
