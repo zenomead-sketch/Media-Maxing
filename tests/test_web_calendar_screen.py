@@ -72,7 +72,8 @@ class WebCalendarScreenTest(unittest.TestCase):
         self.assertIn("local-social-ai-manager.publishQueueItems", self.script)
 
     def test_calendar_route_and_safety_copy_are_present(self):
-        self.assertIn('"home", "media", "generate", "drafts", "calendar"', self.script)
+        self.assertIn('"calendar"', self.script)
+        self.assertIn('href="#calendar"', self.html)
         self.assertIn("Local-only calendar", self.html)
         self.assertIn("Real publishing disabled", self.html)
         self.assertIn("approved drafts", self.html)

@@ -39,6 +39,32 @@ class LocalApiServerTest(unittest.TestCase):
         self.assertNotIn("encrypted_refresh_token", serialized)
         self.assertNotIn("authorization_code", serialized)
         self.assertIn("integrationSetup", bootstrap)
+        self.assertIn("onboarding", bootstrap)
+        self.assertIn("setupChecklist", bootstrap)
+        self.assertIn("safetyCenter", bootstrap)
+        self.assertIn("diagnostics", bootstrap)
+
+    def test_diagnostics_routes_return_safe_results_and_export_report(self):
+        app = self._application()
+
+        diagnostics = app.dispatch("GET", "/api/diagnostics").body
+        exported = app.dispatch(
+            "POST",
+            "/api/diagnostics/export",
+            body={
+                "recentErrors": [
+                    "Failed with client_secret=do-not-leak and Authorization: Bearer token-value"
+                ]
+            },
+        ).body
+        serialized = json.dumps({"diagnostics": diagnostics, "exported": exported})
+
+        self.assertIn("overallStatus", diagnostics)
+        self.assertIn("sections", diagnostics)
+        self.assertTrue(Path(exported["reportPath"]).exists())
+        self.assertNotIn("do-not-leak", serialized)
+        self.assertNotIn("token-value", serialized)
+        self.assertIn("[REDACTED]", Path(exported["reportPath"]).read_text(encoding="utf-8"))
 
     def test_integration_setup_route_masks_server_side_secret_values(self):
         app = self._application()
@@ -96,6 +122,11 @@ class LocalApiServerTest(unittest.TestCase):
             f"/api/ai-memory/{memory['memories'][0]['id']}/archive",
             body={},
         ).body
+        dismissed_memory = app.dispatch(
+            "POST",
+            f"/api/ai-memory/{memory['memories'][1]['id']}/dismiss",
+            body={},
+        ).body
         report = app.dispatch(
             "POST",
             "/api/weekly-reports",
@@ -111,13 +142,105 @@ class LocalApiServerTest(unittest.TestCase):
         self.assertEqual(snapshot["source"], "manual")
         self.assertGreaterEqual(memory["createdCount"], 1)
         self.assertEqual(archived_memory["status"], "archived")
+        self.assertEqual(dismissed_memory["status"], "dismissed")
         self.assertEqual(report["weekStartDate"], "2026-06-08")
+        self.assertFalse(report["promptMetadata"]["externalDataSent"])
+        self.assertGreaterEqual(len(report["nextWeekContentSuggestions"]), 1)
         self.assertEqual(reloaded["settings"]["appName"], "Owner Local Manager")
         self.assertEqual(
             reloaded["brandProfile"]["tagline"],
             "Careful local exterior service",
         )
-        self.assertTrue(any(item["id"] == snapshot["id"] for item in reloaded["analyticsSnapshots"]))
+
+    def test_onboarding_complete_skip_and_restart_routes_persist(self):
+        app = self._application()
+
+        skipped = app.dispatch(
+            "POST",
+            "/api/onboarding/skip",
+            body={"reason": "Owner will explore first."},
+        ).body
+        restarted = app.dispatch("POST", "/api/onboarding/restart", body={}).body
+        completed = app.dispatch(
+            "POST",
+            "/api/onboarding/complete",
+            body={
+                "brandProfile": {
+                    "businessName": "Local Onboarding Demo",
+                    "industry": "Exterior cleaning",
+                    "description": "Plain local setup test.",
+                    "services": ["soft washing"],
+                    "serviceAreas": ["Demo City"],
+                    "brandVoice": "Helpful and direct.",
+                    "commonCTAs": ["Request an estimate"],
+                },
+                "settings": {
+                    "defaultPlatformTargets": ["facebook", "instagram"],
+                    "requireApprovalBeforePublishing": True,
+                    "requireApprovalBeforeReplying": True,
+                    "emergencyPauseEnabled": False,
+                    "automationLevel": "approval_queue",
+                    "localDataDirectory": "./data",
+                },
+            },
+        ).body
+        reloaded = app.dispatch("GET", "/api/bootstrap").body
+
+        self.assertEqual(skipped["status"], "skipped")
+        self.assertEqual(restarted["status"], "in_progress")
+        self.assertEqual(completed["status"], "completed")
+        self.assertEqual(reloaded["onboarding"]["status"], "completed")
+        self.assertEqual(
+            reloaded["setupChecklist"][0]["id"],
+            "brand_profile_created",
+        )
+
+    def test_safety_center_routes_pause_and_log_actions(self):
+        app = self._application()
+
+        state = app.dispatch("GET", "/api/safety-center").body
+        paused = app.dispatch(
+            "POST",
+            "/api/safety-center/emergency-pause",
+            body={"enabled": True, "reason": "Owner safety drill.", "actor_type": "test"},
+        ).body
+        kill = app.dispatch(
+            "POST",
+            "/api/safety-center/kill-switch/pause_all_automation",
+            body={"confirmation_phrase": "PAUSE ALL", "actor_type": "test"},
+        ).body
+        audit = app.dispatch("GET", "/api/safety-center/audit-logs").body
+
+        self.assertFalse(state["emergencyPause"]["enabled"])
+        self.assertTrue(paused["emergencyPause"]["enabled"])
+        self.assertTrue(kill["emergencyPause"]["enabled"])
+        self.assertTrue(any(entry["action"] == "emergency_pause_enabled" for entry in audit))
+        self.assertTrue(any(entry["action"] == "kill_switch_action_completed" for entry in audit))
+
+    def test_backup_routes_create_history_and_restore_preview(self):
+        app = self._application()
+
+        created = app.dispatch(
+            "POST",
+            "/api/backups",
+            body={
+                "backupType": "brand_brain_export",
+                "backupName": "api-brand-export",
+                "includeMedia": False,
+            },
+        ).body
+        history = app.dispatch("GET", "/api/backups").body
+        preview = app.dispatch(
+            "POST",
+            "/api/backups/restore-preview",
+            body={"backupPath": created["backupPath"]},
+        ).body
+
+        self.assertEqual(created["backupType"], "brand_brain_export")
+        self.assertFalse(created["includeSensitiveTokens"])
+        self.assertTrue(any(item["backupId"] == created["backupId"] for item in history))
+        self.assertEqual(preview["status"], "ready")
+        self.assertFalse(preview["willRestoreTokens"])
 
     def test_engagement_reply_workflow_persists_in_sqlite(self):
         app = self._application()

@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
+    <a class="skip-link" href="#app-main">Skip to main content</a>
     <div class="app-shell">
       <aside class="sidebar" aria-label="Main navigation">
         <div class="brand-block">
@@ -17,36 +18,60 @@
           </div>
         </div>
 
-        <nav class="nav-list">
-          <a class="nav-link active" href="#home" aria-current="page">Home</a>
-          <a class="nav-link" href="#media">Media Library</a>
-          <a class="nav-link" href="#generate">Generate</a>
-          <a class="nav-link" href="#drafts">Drafts</a>
-          <a class="nav-link" href="#calendar">Calendar</a>
-          <a class="nav-link" href="#queue">Publish Queue</a>
-          <a class="nav-link" href="#connected">Connected Accounts</a>
-          <a class="nav-link" href="#setup">Social Integration Setup</a>
-          <a class="nav-link" href="#engagement">Engagement</a>
-          <a class="nav-link" href="#analytics">Analytics</a>
-          <a class="nav-link" href="#brand">Brand Brain</a>
-          <a class="nav-link" href="#settings">Settings</a>
+        <nav class="nav-list" aria-label="Main navigation">
+          <a class="nav-link nav-link-primary active" href="#home" aria-current="page">Control Center</a>
+
+          <details class="nav-group" open>
+            <summary>Daily Workflow</summary>
+            <div class="nav-group-links">
+              <a class="nav-link" href="#generate">Generate</a>
+              <a class="nav-link" href="#drafts">Drafts</a>
+              <a class="nav-link" href="#calendar">Calendar</a>
+              <a class="nav-link" href="#queue">Publish Queue</a>
+              <a class="nav-link" href="#engagement">Engagement Inbox</a>
+              <a class="nav-link" href="#analytics">Analytics</a>
+            </div>
+          </details>
+
+          <details class="nav-group">
+            <summary>Setup</summary>
+            <div class="nav-group-links">
+              <a class="nav-link" href="#guide">Intro Setup Guide</a>
+              <a class="nav-link" href="#onboarding">Onboarding</a>
+              <a class="nav-link" href="#brand">Brand Brain</a>
+              <a class="nav-link" href="#media">Media Library</a>
+              <a class="nav-link" href="#connected">Connected Accounts</a>
+              <a class="nav-link" href="#setup">Social Integration Setup</a>
+              <a class="nav-link" href="#settings">Settings</a>
+            </div>
+          </details>
+
+          <details class="nav-group">
+            <summary>Advanced Tools</summary>
+            <div class="nav-group-links">
+              <a class="nav-link" href="#safety">Safety Center</a>
+              <a class="nav-link" href="#backup">Backup & Data</a>
+              <a class="nav-link" href="#diagnostics">Diagnostics</a>
+            </div>
+          </details>
         </nav>
 
         <div class="safety-panel">
           <p class="panel-label">Safety mode</p>
-          <p class="panel-title">Approval required</p>
-          <p class="panel-copy">Real publishing and real replies are disabled.</p>
+          <p class="panel-title">Approval Required</p>
+          <p class="panel-copy">Real publishing and real replies are disabled. Mock Data and Local Only actions are clearly labeled.</p>
         </div>
       </aside>
 
-      <main class="main-content" id="app-main">
+      <main class="main-content" id="app-main" tabindex="-1">
         <section class="route-view active" id="home-view" data-route="home">
-        <header class="topbar">
+        <header class="topbar control-hero">
           <div>
-            <h1>Home</h1>
-            <p>Local-first social planning workspace with mock data only.</p>
+            <span class="card-status local-only">Local Only command center</span>
+            <h1>Control Center</h1>
+            <p>One simple place to see what needs attention, what is ready, and what to do next. Detailed screens stay available as setup and advanced tools.</p>
           </div>
-          <button class="primary-button" type="button">Create draft</button>
+          <a class="primary-button link-button" id="control-next-action" href="#generate" aria-label="Open the recommended next action">Create draft</a>
         </header>
 
         <section class="status-strip" aria-label="Current safety status">
@@ -62,123 +87,650 @@
           </div>
           <div>
             <span class="status-dot blocked" aria-hidden="true"></span>
-            <strong>Real publishing</strong>
-            <span>Disabled</span>
+            <strong>Real publishing disabled</strong>
+            <span>No social APIs are called</span>
           </div>
         </section>
 
-        <section class="dashboard-grid" aria-label="Home dashboard">
-          <article class="dashboard-card">
-            <div class="card-heading">
-              <p class="card-label">Drafts waiting approval</p>
-              <span class="card-status needs-review">Needs review</span>
-            </div>
-            <p class="metric">7</p>
-            <p class="card-copy">Mock drafts ready for owner review before scheduling.</p>
-          </article>
+        <section class="workspace-section control-next-step" aria-labelledby="control-next-heading">
+          <div class="control-next-copy">
+            <p class="panel-label">Recommended next step</p>
+            <h2 id="control-next-heading">What should I do next?</h2>
+            <p id="control-next-copy">Generate a mock draft, then review it before scheduling. Nothing publishes without approval.</p>
+          </div>
+          <div class="control-next-meta" aria-label="Recommended action details">
+            <span class="card-status needs-review" id="control-next-status">Approval Required</span>
+            <span class="card-status local-only">Local Only</span>
+          </div>
+        </section>
 
-          <article class="dashboard-card">
-            <div class="card-heading">
-              <p class="card-label">Scheduled posts</p>
-              <span class="card-status local-only">Local only</span>
-            </div>
-            <p class="metric">12</p>
-            <p class="card-copy">Approved content placed on the local calendar.</p>
+        <section class="control-summary-grid" aria-label="Control Center workflow summary">
+          <article class="control-summary-card">
+            <span class="card-status needs-review">Approval Required</span>
+            <strong id="control-summary-drafts">0</strong>
+            <p>Drafts need review</p>
           </article>
-
-          <article class="dashboard-card">
-            <div class="card-heading">
-              <p class="card-label">Connected accounts</p>
-              <span class="card-status mock-mode">Mock</span>
-            </div>
-            <p class="metric">0</p>
-            <p class="card-copy">No real platform connections. Manual export is the safe path.</p>
+          <article class="control-summary-card">
+            <span class="card-status local-only">Local Calendar</span>
+            <strong id="control-summary-scheduled">0</strong>
+            <p>Upcoming scheduled posts</p>
           </article>
-
-          <article class="dashboard-card">
-            <div class="card-heading">
-              <p class="card-label">Recent media</p>
-              <span class="card-status local-only">Local</span>
-            </div>
-            <p class="metric">24</p>
-            <p class="card-copy">Sample job photos and videos waiting for organization.</p>
+          <article class="control-summary-card">
+            <span class="card-status mock-mode">Manual Export</span>
+            <strong id="control-summary-queue">0</strong>
+            <p>Queue items ready or blocked</p>
           </article>
-
-          <article class="dashboard-card wide-card">
-            <div class="card-heading">
-              <p class="card-label">Weekly performance</p>
-              <span class="card-status mock-mode">Demo data</span>
-            </div>
-            <div class="performance-row">
-              <div>
-                <p class="small-label">Reach</p>
-                <p class="medium-metric">4.8k</p>
-              </div>
-              <div>
-                <p class="small-label">Engagement</p>
-                <p class="medium-metric">6.2%</p>
-              </div>
-              <div>
-                <p class="small-label">Leads</p>
-                <p class="medium-metric">18</p>
-              </div>
-            </div>
-          </article>
-
-          <article class="dashboard-card recommendation-card">
-            <div class="card-heading">
-              <p class="card-label">AI recommendations</p>
-              <span class="card-status needs-review">Review</span>
-            </div>
-            <p class="card-copy">
-              Try two trust-building posts this week using recent project photos.
-              Recommendation is based on mock performance only.
-            </p>
+          <article class="control-summary-card">
+            <span class="card-status needs-review">Local Approval</span>
+            <strong id="control-summary-engagement">0</strong>
+            <p>Engagement items need reply</p>
           </article>
         </section>
 
-        <section class="workspace-section" aria-labelledby="queue-heading">
+        <section class="control-workflow-grid" aria-label="Daily workflow queues">
+          <article class="workspace-section control-panel" aria-labelledby="control-needs-heading">
+            <div class="section-header compact">
+              <div>
+                <h2 id="control-needs-heading">Needs Attention</h2>
+                <p>Review these before anything moves forward.</p>
+              </div>
+            </div>
+            <div class="control-task-list" id="control-needs-list" aria-live="polite"></div>
+          </article>
+
+          <article class="workspace-section control-panel" aria-labelledby="control-ready-heading">
+            <div class="section-header compact">
+              <div>
+                <h2 id="control-ready-heading">Ready To Do</h2>
+                <p>Local tasks that are safe to handle next.</p>
+              </div>
+            </div>
+            <div class="control-task-list" id="control-ready-list" aria-live="polite"></div>
+          </article>
+
+          <article class="workspace-section control-panel" aria-labelledby="control-week-heading">
+            <div class="section-header compact">
+              <div>
+                <h2 id="control-week-heading">This Week</h2>
+                <p>Upcoming local work and recent learning signals.</p>
+              </div>
+            </div>
+            <div class="control-task-list" id="control-week-list" aria-live="polite"></div>
+          </article>
+
+          <article class="workspace-section control-panel" aria-labelledby="control-safety-heading">
+            <div class="section-header compact">
+              <div>
+                <h2 id="control-safety-heading">Safety Status</h2>
+                <p>Real publishing and automatic replies stay disabled.</p>
+              </div>
+            </div>
+            <div class="control-task-list" id="control-safety-list" aria-live="polite"></div>
+          </article>
+        </section>
+
+        <section class="workspace-section control-quick-actions" aria-labelledby="control-actions-heading">
           <div class="section-header">
             <div>
-              <h2 id="queue-heading">Approval queue preview</h2>
-              <p>Mock content waiting for owner review.</p>
+              <h2 id="control-actions-heading">Quick Actions</h2>
+              <p>Use these for the common daily workflow. Admin tools are still in the sidebar when you need them.</p>
             </div>
-            <button class="secondary-button" type="button">View drafts</button>
           </div>
-
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Draft</th>
-                  <th>Platform</th>
-                  <th>Status</th>
-                  <th>Safety</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Spring tune-up reminder</td>
-                  <td>Facebook</td>
-                  <td>Needs review</td>
-                  <td>No blockers</td>
-                </tr>
-                <tr>
-                  <td>Before and after project recap</td>
-                  <td>Instagram</td>
-                  <td>Revision requested</td>
-                  <td>Needs claim check</td>
-                </tr>
-                <tr>
-                  <td>FAQ: booking availability</td>
-                  <td>LinkedIn</td>
-                  <td>Needs review</td>
-                  <td>No blockers</td>
-                </tr>
-              </tbody>
-            </table>
+          <div class="control-action-grid">
+            <a class="control-action-card" href="#generate">
+              <span class="card-status mock-mode">Mock Data</span>
+              <strong>Generate Draft</strong>
+              <p>Create platform-specific draft ideas for review.</p>
+            </a>
+            <a class="control-action-card" href="#guide">
+              <span class="card-status local-only">Start Here</span>
+              <strong>Intro Setup Guide</strong>
+              <p>Walk through Brand Brain, media upload, mock social connections, and safe next steps.</p>
+            </a>
+            <a class="control-action-card" href="#drafts">
+              <span class="card-status needs-review">Approval Required</span>
+              <strong>Review Drafts</strong>
+              <p>Edit, approve, reject, or request revisions locally.</p>
+            </a>
+            <a class="control-action-card" href="#calendar">
+              <span class="card-status local-only">Local Only</span>
+              <strong>Schedule</strong>
+              <p>Place approved drafts on the local calendar.</p>
+            </a>
+            <a class="control-action-card" href="#queue">
+              <span class="card-status mock-mode">Manual Export</span>
+              <strong>Publish Queue</strong>
+              <p>Run preflight and prepare manual posting packages.</p>
+            </a>
+            <a class="control-action-card" href="#engagement">
+              <span class="card-status needs-review">Local Approval</span>
+              <strong>Engagement Inbox</strong>
+              <p>Review mock/manual messages and approve reply drafts locally.</p>
+            </a>
+            <a class="control-action-card" href="#analytics">
+              <span class="card-status local-only">Local Learning</span>
+              <strong>Analytics</strong>
+              <p>Enter manual metrics, view mock data, and review weekly learning.</p>
+            </a>
           </div>
         </section>
+
+        <section class="workspace-section onboarding-home-panel" aria-labelledby="home-setup-heading">
+          <div class="section-header">
+            <div>
+              <h2 id="home-setup-heading">Setup checklist</h2>
+              <p>Keep setup visible without making it the whole app. You can restart onboarding anytime.</p>
+            </div>
+            <a class="secondary-button" id="home-onboarding-start" href="#onboarding">Open onboarding</a>
+          </div>
+          <div class="setup-checklist-grid" id="home-setup-checklist" aria-live="polite">
+            <article class="setup-checklist-item">
+              <span class="card-status needs-review">not started</span>
+              <strong>Brand profile created</strong>
+              <p>Create the Brand Brain before generating drafts.</p>
+            </article>
+            <article class="setup-checklist-item">
+              <span class="card-status needs-review">not started</span>
+              <strong>Manual export tested</strong>
+              <p>Manual export remains the safe posting path until real publishing is enabled later.</p>
+            </article>
+          </div>
+        </section>
+        </section>
+
+        <section class="route-view" id="guide-view" data-route="guide" hidden>
+          <header class="topbar">
+            <div>
+              <h1>Intro Setup Guide</h1>
+              <p>A plain-language walkthrough for setting up Media Maxing locally, connecting mock/social setup paths, and uploading media. Nothing publishes without approval.</p>
+            </div>
+            <a class="primary-button link-button" href="#onboarding">Start onboarding</a>
+          </header>
+
+          <section class="status-strip" aria-label="Intro setup safety status">
+            <div>
+              <span class="status-dot safe" aria-hidden="true"></span>
+              <strong>Local-first setup</strong>
+              <span>Your data stays on this machine by default</span>
+            </div>
+            <div>
+              <span class="status-dot warning" aria-hidden="true"></span>
+              <strong>Social setup</strong>
+              <span>Mock connect now, real OAuth later</span>
+            </div>
+            <div>
+              <span class="status-dot blocked" aria-hidden="true"></span>
+              <strong>Real publishing disabled</strong>
+              <span>Disabled until a future safety-gated build</span>
+            </div>
+          </section>
+
+          <section class="workspace-section setup-guide-intro" aria-labelledby="setup-guide-overview-heading">
+            <div>
+              <span class="card-status local-only">Recommended path</span>
+              <h2 id="setup-guide-overview-heading">Set up once, then run from Control Center</h2>
+              <p>
+                This guide connects the setup screens that already exist in the app. Follow it from top to bottom the first time.
+                After that, use Control Center for daily work and keep the detailed screens as your backend dashboard.
+              </p>
+            </div>
+            <div class="setup-guide-callout">
+              <strong>Safe default</strong>
+              <p>Use mock social connections and Manual Export while real platform APIs are disabled. The app will not post or send replies for you.</p>
+            </div>
+          </section>
+
+          <section class="setup-guide-grid" aria-label="Intro setup steps">
+            <article class="workspace-section setup-guide-card">
+              <span class="setup-guide-step">1</span>
+              <div>
+                <h2>Confirm local setup</h2>
+                <p>Run onboarding to confirm the local data folder, safe defaults, approval requirements, and emergency pause behavior.</p>
+                <div class="button-row">
+                  <a class="primary-button link-button" href="#onboarding">Open Onboarding</a>
+                  <a class="secondary-button link-button" href="#settings">Review Settings</a>
+                </div>
+              </div>
+            </article>
+
+            <article class="workspace-section setup-guide-card">
+              <span class="setup-guide-step">2</span>
+              <div>
+                <h2>Create your Brand Brain</h2>
+                <p>Add your business name, services, service areas, voice, common CTA, and rules the AI must follow. This keeps drafts from inventing facts.</p>
+                <div class="button-row">
+                  <a class="primary-button link-button" href="#brand">Open Brand Brain</a>
+                </div>
+              </div>
+            </article>
+
+            <article class="workspace-section setup-guide-card">
+              <span class="setup-guide-step">3</span>
+              <div>
+                <h2>Upload or import media</h2>
+                <p>Add real job photos or videos in Media Library. Tag service type, location context, notes, and content angle so generated drafts have useful context.</p>
+                <div class="button-row">
+                  <a class="primary-button link-button" href="#media">Open Media Library</a>
+                  <a class="secondary-button link-button" href="#generate">Generate after media</a>
+                </div>
+              </div>
+            </article>
+
+            <article class="workspace-section setup-guide-card">
+              <span class="setup-guide-step">4</span>
+              <div>
+                <h2>Connect your chosen social platforms</h2>
+                <p>Pick the platforms you want to prepare content for: Facebook, Instagram, Threads, YouTube Shorts, TikTok, LinkedIn, or X.</p>
+                <p class="muted-copy">Current connections are mock/scaffolded. Real OAuth, tokens, and real publishing stay disabled until a future guarded build.</p>
+                <div class="button-row">
+                  <a class="primary-button link-button" href="#connected">Mock-connect accounts</a>
+                  <a class="secondary-button link-button" href="#setup">Review setup wizard</a>
+                </div>
+              </div>
+            </article>
+
+            <article class="workspace-section setup-guide-card">
+              <span class="setup-guide-step">5</span>
+              <div>
+                <h2>Generate and approve drafts</h2>
+                <p>Use Generate to create mock AI drafts from your Brand Brain and media. Save only the drafts you want to review, then approve or revise them in Drafts.</p>
+                <div class="button-row">
+                  <a class="primary-button link-button" href="#generate">Generate Drafts</a>
+                  <a class="secondary-button link-button" href="#drafts">Review Drafts</a>
+                </div>
+              </div>
+            </article>
+
+            <article class="workspace-section setup-guide-card">
+              <span class="setup-guide-step">6</span>
+              <div>
+                <h2>Schedule and manually export</h2>
+                <p>Approved drafts can be scheduled locally, checked in Publish Queue, and exported as Manual Export packages. Manual Export is the safe posting path for this release.</p>
+                <div class="button-row">
+                  <a class="primary-button link-button" href="#calendar">Open Calendar</a>
+                  <a class="secondary-button link-button" href="#queue">Open Publish Queue</a>
+                </div>
+              </div>
+            </article>
+
+            <article class="workspace-section setup-guide-card">
+              <span class="setup-guide-step">7</span>
+              <div>
+                <h2>Track learning and engagement</h2>
+                <p>Add manual analytics, generate clearly labeled mock analytics, review engagement, and approve reply suggestions locally. Replies are not sent automatically.</p>
+                <div class="button-row">
+                  <a class="primary-button link-button" href="#analytics">Open Analytics</a>
+                  <a class="secondary-button link-button" href="#engagement">Open Engagement Inbox</a>
+                </div>
+              </div>
+            </article>
+
+            <article class="workspace-section setup-guide-card">
+              <span class="setup-guide-step">8</span>
+              <div>
+                <h2>Protect the app</h2>
+                <p>Use Safety Center, Backup & Data, and Diagnostics before serious local testing. Backups and diagnostic reports stay local and exclude secrets by default.</p>
+                <div class="button-row">
+                  <a class="primary-button link-button" href="#safety">Safety Center</a>
+                  <a class="secondary-button link-button" href="#backup">Backup & Data</a>
+                  <a class="secondary-button link-button" href="#diagnostics">Diagnostics</a>
+                </div>
+              </div>
+            </article>
+          </section>
+
+          <section class="workspace-section" aria-labelledby="setup-guide-social-heading">
+            <div class="section-header">
+              <div>
+                <h2 id="setup-guide-social-heading">Social media connection notes</h2>
+                <p>Pick only the platforms you actually use. It is okay to stay in mock mode and use Manual Export.</p>
+              </div>
+              <a class="secondary-button link-button" href="#connected">Open Connected Accounts</a>
+            </div>
+            <div class="setup-guide-platforms">
+              <article><strong>Facebook / Instagram / Threads</strong><p>Use Meta setup placeholders now. Future real OAuth will need developer app configuration and app review checks.</p></article>
+              <article><strong>YouTube Shorts</strong><p>Use YouTube mock setup now. Future upload support will require Google OAuth and YouTube Data API verification.</p></article>
+              <article><strong>TikTok</strong><p>Use TikTok mock setup now. Future posting needs TikTok developer access and posting permission review.</p></article>
+              <article><strong>LinkedIn</strong><p>Use LinkedIn mock setup now. Future posting may need product access and organization/page permission checks.</p></article>
+              <article><strong>X</strong><p>Use X mock setup now. Future integration must verify API access, pricing, scopes, and rate limits first.</p></article>
+            </div>
+          </section>
+        </section>
+
+        <section class="route-view" id="onboarding-view" data-route="onboarding" hidden>
+          <header class="topbar">
+            <div>
+              <h1>Onboarding</h1>
+              <p>First-run setup for a local-first workflow. Nothing publishes without approval.</p>
+            </div>
+            <div class="topbar-actions">
+              <button class="secondary-button" id="onboarding-skip" type="button">Skip for now</button>
+              <button class="primary-button" id="onboarding-complete" type="button">Complete setup</button>
+            </div>
+          </header>
+
+          <section class="status-strip" aria-label="Onboarding safety status">
+            <div>
+              <span class="status-dot safe" aria-hidden="true"></span>
+              <strong>Local-first</strong>
+              <span>Data stays on this machine by default</span>
+            </div>
+            <div>
+              <span class="status-dot warning" aria-hidden="true"></span>
+              <strong>Approval required</strong>
+              <span>Nothing publishes without approval</span>
+            </div>
+            <div>
+              <span class="status-dot blocked" aria-hidden="true"></span>
+              <strong>Real publishing</strong>
+              <span>Real publishing: disabled</span>
+            </div>
+          </section>
+
+          <section class="workspace-section onboarding-intro" aria-labelledby="onboarding-step-title">
+            <div>
+              <p class="panel-label">Mock/demo mode is available</p>
+              <h2 id="onboarding-step-title">Welcome</h2>
+              <p>
+                This is a local-first AI social media manager. It helps generate drafts,
+                schedule posts, track performance, and manage engagement. Real social connections can be configured later. Real auto-replies: disabled.
+              </p>
+            </div>
+            <ol class="onboarding-progress" id="onboarding-progress" aria-label="Onboarding progress">
+              <li>Welcome</li>
+              <li>Local data</li>
+              <li>Brand Brain</li>
+              <li>Safety</li>
+              <li>Next steps</li>
+            </ol>
+          </section>
+
+          <div class="onboarding-layout">
+            <section class="workspace-section onboarding-card" aria-labelledby="onboarding-local-data-heading">
+              <div class="section-header compact-header">
+                <div>
+                  <h2 id="onboarding-local-data-heading">1. Local data directory</h2>
+                  <p>Confirm where local app data lives. Avoid temporary folders.</p>
+                </div>
+              </div>
+              <dl class="detail-list">
+                <div><dt>Current directory</dt><dd id="onboarding-local-data-directory">./data</dd></div>
+                <div><dt>Exists</dt><dd id="onboarding-local-data-exists">Checking...</dd></div>
+                <div><dt>Writable</dt><dd id="onboarding-local-data-writable">Checking...</dd></div>
+              </dl>
+              <p class="muted-copy">Change directory support is a desktop-readiness placeholder for now.</p>
+              <button class="secondary-button" id="onboarding-local-data-default" type="button">Continue with default</button>
+            </section>
+
+            <section class="workspace-section onboarding-card" aria-labelledby="onboarding-brand-heading">
+              <div class="section-header compact-header">
+                <div>
+                  <h2 id="onboarding-brand-heading">2. Brand Brain basics</h2>
+                  <p>Tell the app what business it is helping.</p>
+                </div>
+              </div>
+              <form class="form-grid" id="onboarding-brand-form" novalidate>
+                <label class="field">
+                  <span>Business name</span>
+                  <input id="onboarding-businessName" type="text" required placeholder="Brightside Exterior Care" />
+                </label>
+                <label class="field">
+                  <span>Industry</span>
+                  <input id="onboarding-industry" type="text" placeholder="Exterior cleaning" />
+                </label>
+                <label class="field full-width-field">
+                  <span>Description</span>
+                  <textarea id="onboarding-description" rows="3" placeholder="What does the business do, and who does it help?"></textarea>
+                </label>
+                <label class="field list-field">
+                  <span>Services, one per line</span>
+                  <textarea id="onboarding-services" rows="5" placeholder="pressure washing&#10;gutter cleaning"></textarea>
+                </label>
+                <label class="field list-field">
+                  <span>Service areas, one per line</span>
+                  <textarea id="onboarding-serviceAreas" rows="5" placeholder="Demo City&#10;Nearby towns"></textarea>
+                </label>
+                <label class="field">
+                  <span>Brand voice</span>
+                  <input id="onboarding-brandVoice" type="text" placeholder="Helpful, plain-spoken, local" />
+                </label>
+                <label class="field">
+                  <span>Common CTA</span>
+                  <input id="onboarding-commonCTA" type="text" placeholder="Request an estimate" />
+                </label>
+                <label class="field">
+                  <span>Website, optional</span>
+                  <input id="onboarding-website" type="url" placeholder="https://example.com" />
+                </label>
+                <label class="field">
+                  <span>Phone, optional</span>
+                  <input id="onboarding-phone" type="tel" placeholder="555-0100" />
+                </label>
+                <label class="field">
+                  <span>Email, optional</span>
+                  <input id="onboarding-email" type="email" placeholder="hello@example.com" />
+                </label>
+              </form>
+            </section>
+
+            <section class="workspace-section onboarding-card" aria-labelledby="onboarding-platforms-heading">
+              <div class="section-header compact-header">
+                <div>
+                  <h2 id="onboarding-platforms-heading">3. Default platforms</h2>
+                  <p>Choose draft targets. These do not connect to real social APIs.</p>
+                </div>
+              </div>
+              <fieldset class="checkbox-group" id="onboarding-platforms">
+                <legend>Default draft platforms</legend>
+                <label><input type="checkbox" name="onboarding-platforms" value="instagram" checked /> Instagram</label>
+                <label><input type="checkbox" name="onboarding-platforms" value="facebook" checked /> Facebook</label>
+                <label><input type="checkbox" name="onboarding-platforms" value="threads" /> Threads</label>
+                <label><input type="checkbox" name="onboarding-platforms" value="tiktok" /> TikTok</label>
+                <label><input type="checkbox" name="onboarding-platforms" value="youtube" /> YouTube Shorts</label>
+                <label><input type="checkbox" name="onboarding-platforms" value="linkedin" /> LinkedIn</label>
+                <label><input type="checkbox" name="onboarding-platforms" value="x" /> X</label>
+              </fieldset>
+            </section>
+
+            <section class="workspace-section onboarding-card" aria-labelledby="onboarding-safety-heading">
+              <div class="section-header compact-header">
+                <div>
+                  <h2 id="onboarding-safety-heading">4. Safety settings</h2>
+                  <p>Confirm the app starts in approval-first mode.</p>
+                </div>
+                <span class="card-status needs-review">approval queue</span>
+              </div>
+              <dl class="detail-list" id="onboarding-safety-summary">
+                <div><dt>Require approval before publishing</dt><dd>true</dd></div>
+                <div><dt>Require approval before replying</dt><dd>true</dd></div>
+                <div><dt>Emergency pause</dt><dd>false</dd></div>
+                <div><dt>Automation level</dt><dd>approval_queue</dd></div>
+                <div><dt>Real publishing</dt><dd>disabled</dd></div>
+                <div><dt>Real auto-replies</dt><dd>disabled</dd></div>
+              </dl>
+            </section>
+
+            <section class="workspace-section onboarding-card" aria-labelledby="onboarding-media-heading">
+              <div class="section-header compact-header">
+                <div>
+                  <h2 id="onboarding-media-heading">5. First media</h2>
+                  <p>Import a local photo or video, use demo records, or skip for now.</p>
+                </div>
+              </div>
+              <input id="onboarding-media-input" type="file" accept="image/*,video/*" multiple hidden />
+              <div class="button-row">
+                <button class="secondary-button" id="onboarding-media-import" type="button">Import media</button>
+                <button class="secondary-button" id="onboarding-media-skip" type="button">Skip media for now</button>
+              </div>
+              <p class="muted-copy" id="onboarding-media-status">No media imported in onboarding yet.</p>
+            </section>
+
+            <section class="workspace-section onboarding-card" aria-labelledby="onboarding-demo-draft-heading">
+              <div class="section-header compact-header">
+                <div>
+                  <h2 id="onboarding-demo-draft-heading">6. First demo draft</h2>
+                  <p>Generate one mock draft after setup. It will be saved as needs_review only after confirmation.</p>
+                </div>
+              </div>
+              <button class="secondary-button" id="onboarding-demo-draft" type="button">Generate mock draft after setup</button>
+              <p class="muted-copy" id="onboarding-demo-draft-status">No demo draft requested yet.</p>
+            </section>
+
+            <section class="workspace-section onboarding-card" aria-labelledby="onboarding-next-heading">
+              <div class="section-header compact-header">
+                <div>
+                  <h2 id="onboarding-next-heading">7. Review next steps</h2>
+                  <p>Setup complete will point you toward the normal local workflow.</p>
+                </div>
+              </div>
+              <ol class="setup-checklist">
+                <li>Finish Brand Brain.</li>
+                <li>Upload real media.</li>
+                <li>Generate drafts.</li>
+                <li>Approve drafts.</li>
+                <li>Schedule posts.</li>
+                <li>Track analytics.</li>
+                <li>Use manual export until real publishing is enabled.</li>
+              </ol>
+            </section>
+          </div>
+
+          <p class="form-message error-message" id="onboarding-error" role="alert" hidden></p>
+          <p class="form-message success-message" id="onboarding-success" role="status" hidden></p>
+        </section>
+
+        <section class="route-view" id="safety-view" data-route="safety" hidden>
+          <header class="topbar">
+            <div>
+              <h1>Safety Center</h1>
+              <p>Pause automation, review safety gates, and keep future publishing or replies from happening accidentally.</p>
+            </div>
+            <div class="topbar-actions">
+              <button class="secondary-button" id="safety-refresh" type="button">Refresh status</button>
+              <button class="primary-button" id="safety-export-report" type="button">Export safety report</button>
+            </div>
+          </header>
+
+          <section class="status-strip" aria-label="Safety Center headline status">
+            <div id="safety-publishing-status">
+              <span class="status-dot blocked" aria-hidden="true"></span>
+              <strong>Publishing safety status</strong>
+              <span>Real publishing remains disabled</span>
+            </div>
+            <div id="safety-reply-status">
+              <span class="status-dot warning" aria-hidden="true"></span>
+              <strong>Reply safety status</strong>
+              <span>Replies are not sent automatically</span>
+            </div>
+            <div id="safety-queue-status">
+              <span class="status-dot safe" aria-hidden="true"></span>
+              <strong>Queue processing status</strong>
+              <span>Local queue only</span>
+            </div>
+          </section>
+
+          <section class="workspace-section safety-emergency-panel" aria-labelledby="safety-emergency-heading">
+            <div class="section-header compact-header">
+              <div>
+                <h2 id="safety-emergency-heading">Emergency pause</h2>
+                <p>When enabled, pause blocks scheduling, queue readiness changes, mock publishing, manual export packages, future publishing, future reply sending, and automation above approval queue.</p>
+              </div>
+              <label class="toggle-row">
+                <input id="safety-emergency-toggle" type="checkbox" />
+                <span>Emergency pause enabled</span>
+              </label>
+            </div>
+            <p class="form-message success-message" id="safety-message" role="status" hidden></p>
+            <p class="form-message error-message" id="safety-error" role="alert" hidden></p>
+            <dl class="detail-list">
+              <div><dt>Current state</dt><dd id="safety-emergency-state">Loading...</dd></div>
+              <div><dt>Enabled at</dt><dd id="safety-emergency-enabled-at">-</dd></div>
+              <div><dt>Enabled by</dt><dd id="safety-emergency-enabled-by">-</dd></div>
+              <div><dt>Reason</dt><dd id="safety-emergency-reason">-</dd></div>
+            </dl>
+          </section>
+
+          <section class="safety-grid">
+            <section class="workspace-section safety-card" aria-labelledby="safety-automation-heading">
+              <div class="section-header compact-header">
+                <div>
+                  <h2 id="safety-automation-heading">Automation level</h2>
+                  <p>Modes above approval queue are planned/locked in this MVP.</p>
+                </div>
+              </div>
+              <select id="safety-automation-level" aria-label="Automation level">
+                <option value="manual_assist">Manual assist</option>
+                <option value="approval_queue">Approval queue</option>
+                <option value="semi_auto_scheduling">Semi-auto scheduling (locked)</option>
+                <option value="safe_auto_posting">Safe auto posting (locked)</option>
+                <option value="autonomous_content_engine">Autonomous content engine (locked)</option>
+              </select>
+              <div class="safety-list" id="safety-automation-levels"></div>
+            </section>
+
+            <section class="workspace-section safety-card" aria-labelledby="safety-connected-heading">
+              <div class="section-header compact-header">
+                <div>
+                  <h2 id="safety-connected-heading">Connected account safety status</h2>
+                  <p>Token fields are never shown here.</p>
+                </div>
+              </div>
+              <div class="safety-list" id="safety-connected-status"></div>
+            </section>
+
+            <section class="workspace-section safety-card" aria-labelledby="safety-critical-heading">
+              <div class="section-header compact-header">
+                <div>
+                  <h2 id="safety-critical-heading">Critical safety flags summary</h2>
+                  <p>Critical flags block scheduling and future publishing.</p>
+                </div>
+              </div>
+              <div class="safety-list" id="safety-critical-flags"></div>
+            </section>
+
+            <section class="workspace-section safety-card" aria-labelledby="safety-approvals-heading">
+              <div class="section-header compact-header">
+                <div>
+                  <h2 id="safety-approvals-heading">Pending approvals summary</h2>
+                  <p>AI-generated content and reply suggestions remain local until approved.</p>
+                </div>
+              </div>
+              <div class="safety-list" id="safety-pending-approvals"></div>
+            </section>
+          </section>
+
+          <section class="safety-grid">
+            <section class="workspace-section safety-card" aria-labelledby="safety-blocked-heading">
+              <h2 id="safety-blocked-heading">What pause blocks</h2>
+              <ul class="safety-list" id="safety-blocked-actions"></ul>
+            </section>
+            <section class="workspace-section safety-card" aria-labelledby="safety-allowed-heading">
+              <h2 id="safety-allowed-heading">What remains allowed</h2>
+              <ul class="safety-list" id="safety-allowed-actions"></ul>
+            </section>
+          </section>
+
+          <section class="workspace-section safety-card" id="safety-kill-switch" aria-labelledby="safety-kill-heading">
+            <div class="section-header compact-header">
+              <div>
+                <h2 id="safety-kill-heading">Kill switch</h2>
+                <p>Dangerous actions require confirmation and prefer reversible local state changes. Full local reset is only a placeholder.</p>
+              </div>
+              <span class="card-status needs-review">confirm required</span>
+            </div>
+            <div class="safety-kill-grid" id="safety-kill-actions"></div>
+          </section>
+
+          <section class="workspace-section safety-card" aria-labelledby="safety-audit-heading">
+            <div class="section-header compact-header">
+              <div>
+                <h2 id="safety-audit-heading">Safety audit log</h2>
+                <p>Records emergency pause, automation, and kill switch actions.</p>
+              </div>
+              <span class="card-status local-only">local audit</span>
+            </div>
+            <div class="safety-audit-list" id="safety-audit-log"></div>
+          </section>
         </section>
 
         <section class="route-view" id="media-view" data-route="media" hidden>
@@ -585,6 +1137,121 @@
           </form>
         </section>
 
+        <section class="route-view" id="diagnostics-view" data-route="diagnostics" hidden>
+          <header class="topbar">
+            <div>
+              <h1>Diagnostics</h1>
+              <p>App Diagnostics checks local app health, storage, database, safety, integrations, and workflow status. No secrets are shown.</p>
+            </div>
+            <div class="topbar-actions">
+              <button class="secondary-button" id="diagnostics-copy-report" type="button">Copy diagnostic summary</button>
+              <button class="primary-button" id="diagnostics-export-report" type="button">Export diagnostic report</button>
+            </div>
+          </header>
+
+          <section class="status-strip" id="diagnostics-summary" aria-label="Overall diagnostics summary">
+            <div>
+              <span class="status-dot warning" aria-hidden="true"></span>
+              <strong>Overall health</strong>
+              <span id="diagnostics-overall-status">Unknown</span>
+            </div>
+            <div>
+              <span class="status-dot safe" aria-hidden="true"></span>
+              <strong>Local only</strong>
+              <span>Diagnostics stay on this machine</span>
+            </div>
+            <div>
+              <span class="status-dot blocked" aria-hidden="true"></span>
+              <strong>No secrets</strong>
+              <span>Tokens and client secrets are redacted</span>
+            </div>
+          </section>
+
+          <section class="workspace-section diagnostics-panel" aria-labelledby="diagnostics-next-heading">
+            <div class="section-header compact-header">
+              <div>
+                <h2 id="diagnostics-next-heading">What to do next</h2>
+                <p>Friendly troubleshooting steps based on the latest local checks.</p>
+              </div>
+              <button class="secondary-button" id="diagnostics-refresh" type="button">Refresh checks</button>
+            </div>
+            <div class="diagnostics-next-steps" id="diagnostics-next-steps">
+              <p class="empty-state">Run diagnostics to see suggested next steps.</p>
+            </div>
+            <p class="form-message success-message" id="diagnostics-message" role="status" hidden></p>
+            <p class="form-message error-message" id="diagnostics-error" role="alert" hidden></p>
+          </section>
+
+          <section class="diagnostics-grid" aria-label="Diagnostics sections">
+            <section class="workspace-section diagnostics-panel" aria-labelledby="diagnostics-local-storage-heading">
+              <div class="section-header compact-header">
+                <div><h2 id="diagnostics-local-storage-heading">Local storage</h2><p>Data, media, exports, logs, and backup folders.</p></div>
+              </div>
+              <div class="diagnostics-result-list" id="diagnostics-local-storage"></div>
+            </section>
+
+            <section class="workspace-section diagnostics-panel" aria-labelledby="diagnostics-database-heading">
+              <div class="section-header compact-header">
+                <div><h2 id="diagnostics-database-heading">Database</h2><p>SQLite reachability and migration status.</p></div>
+              </div>
+              <div class="diagnostics-result-list" id="diagnostics-database"></div>
+            </section>
+
+            <section class="workspace-section diagnostics-panel" aria-labelledby="diagnostics-ai-heading">
+              <div class="section-header compact-header">
+                <div><h2 id="diagnostics-ai-heading">AI</h2><p>Provider preference and mock AI availability.</p></div>
+              </div>
+              <div class="diagnostics-result-list" id="diagnostics-ai"></div>
+            </section>
+
+            <section class="workspace-section diagnostics-panel" aria-labelledby="diagnostics-integrations-heading">
+              <div class="section-header compact-header">
+                <div><h2 id="diagnostics-integrations-heading">Social integrations</h2><p>Configuration status, token storage mode, and account summary.</p></div>
+              </div>
+              <div class="diagnostics-result-list" id="diagnostics-integrations"></div>
+            </section>
+
+            <section class="workspace-section diagnostics-panel" aria-labelledby="diagnostics-safety-heading">
+              <div class="section-header compact-header">
+                <div><h2 id="diagnostics-safety-heading">Safety</h2><p>Emergency pause, automation level, flags, and pending approvals.</p></div>
+              </div>
+              <div class="diagnostics-result-list" id="diagnostics-safety"></div>
+            </section>
+
+            <section class="workspace-section diagnostics-panel" aria-labelledby="diagnostics-queue-jobs-heading">
+              <div class="section-header compact-header">
+                <div><h2 id="diagnostics-queue-jobs-heading">Queue and jobs</h2><p>Publish queue blockers and local runner status.</p></div>
+              </div>
+              <div class="diagnostics-result-list" id="diagnostics-queue-jobs"></div>
+            </section>
+
+            <section class="workspace-section diagnostics-panel" aria-labelledby="diagnostics-workflow-heading">
+              <div class="section-header compact-header">
+                <div><h2 id="diagnostics-workflow-heading">Content workflow</h2><p>Drafts, engagement, analytics, and setup checklist health.</p></div>
+              </div>
+              <div class="diagnostics-result-list" id="diagnostics-workflow"></div>
+            </section>
+
+            <section class="workspace-section diagnostics-panel" aria-labelledby="diagnostics-backups-heading">
+              <div class="section-header compact-header">
+                <div><h2 id="diagnostics-backups-heading">Backups</h2><p>Backup history and restore readiness.</p></div>
+              </div>
+              <div class="diagnostics-result-list" id="diagnostics-backups"></div>
+            </section>
+          </section>
+
+          <section class="workspace-section diagnostics-panel" aria-labelledby="diagnostics-errors-heading">
+            <div class="section-header compact-header">
+              <div>
+                <h2 id="diagnostics-errors-heading">Recent errors</h2>
+                <p>Safe, redacted browser or API errors. Raw provider payloads are not shown.</p>
+              </div>
+              <span class="card-status local-only">Local troubleshooting</span>
+            </div>
+            <div class="diagnostics-result-list" id="diagnostics-recent-errors"></div>
+          </section>
+        </section>
+
         <section class="route-view" id="settings-view" data-route="settings" hidden>
           <header class="topbar">
             <div>
@@ -725,6 +1392,19 @@
               </label>
             </section>
 
+            <section class="workspace-section settings-section" aria-labelledby="settings-onboarding-heading">
+              <div class="section-header compact-header">
+                <div>
+                  <h2 id="settings-onboarding-heading">Onboarding</h2>
+                  <p>Restart the guided first-run checklist or skip it without blocking the app.</p>
+                </div>
+              </div>
+              <div class="button-row">
+                <button class="secondary-button" id="settings-restart-onboarding" type="button">Restart onboarding</button>
+                <a class="secondary-button" href="#onboarding">Open onboarding</a>
+              </div>
+            </section>
+
             <div class="settings-actions">
               <p class="form-message error-message" id="settings-error" role="alert" hidden></p>
               <p class="form-message success-message" id="settings-success" role="status" hidden></p>
@@ -732,6 +1412,130 @@
               <button class="primary-button" type="submit">Save settings</button>
             </div>
           </form>
+        </section>
+
+        <section class="route-view" id="backup-view" data-route="backup" hidden>
+          <header class="topbar">
+            <div>
+              <h1>Backup & Data</h1>
+              <p>Create local backups, export data categories, and preview restore plans before changing anything.</p>
+            </div>
+          </header>
+
+          <section class="status-strip" aria-label="Backup safety status">
+            <div>
+              <span class="status-dot safe" aria-hidden="true"></span>
+              <strong>No cloud upload</strong>
+              <span>Backups are written to the local data folder</span>
+            </div>
+            <div>
+              <span class="status-dot warning" aria-hidden="true"></span>
+              <strong>Raw tokens are excluded</strong>
+              <span>Secrets are not included by default</span>
+            </div>
+            <div>
+              <span class="status-dot blocked" aria-hidden="true"></span>
+              <strong>Restore preview first</strong>
+              <span>No overwrite without confirmation</span>
+            </div>
+          </section>
+
+          <section class="backup-layout">
+            <section class="workspace-section backup-panel" aria-labelledby="backup-create-heading">
+              <div class="section-header compact-header">
+                <div>
+                  <h2 id="backup-create-heading">Create backup</h2>
+                  <p>Choose the safest local export for what you want to protect or move.</p>
+                </div>
+                <span class="card-status local-only">Local files</span>
+              </div>
+
+              <form class="backup-form" id="backup-create-form" novalidate>
+                <label class="field">
+                  <span>Backup type</span>
+                  <select id="backup-type">
+                    <option value="full_local_backup">Full local backup</option>
+                    <option value="database_only">Database-only backup</option>
+                    <option value="content_only">Content-only export</option>
+                    <option value="brand_brain_export">Brand Brain export</option>
+                    <option value="media_metadata_export">Media metadata export</option>
+                    <option value="analytics_export">Analytics export</option>
+                    <option value="engagement_export">Engagement export</option>
+                    <option value="ai_memory_export">AI memory export</option>
+                    <option value="safety_report_export">Safety report export</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Backup name</span>
+                  <input id="backup-name" type="text" placeholder="before-new-campaign" />
+                </label>
+                <label class="checkbox-row">
+                  <input id="backup-include-media" type="checkbox" />
+                  <span>Include media files when local files are available</span>
+                </label>
+                <label class="checkbox-row">
+                  <input id="backup-include-token-metadata" type="checkbox" />
+                  <span>Advanced: include token metadata only, never raw tokens</span>
+                </label>
+                <div class="backup-actions">
+                  <button class="primary-button" type="submit">Create backup</button>
+                  <button class="secondary-button" id="backup-refresh-history" type="button">Refresh history</button>
+                </div>
+              </form>
+
+              <p class="form-message success-message" id="backup-message" role="status" hidden></p>
+              <p class="form-message error-message" id="backup-error" role="alert" hidden></p>
+            </section>
+
+            <section class="workspace-section backup-panel" aria-labelledby="backup-export-heading">
+              <div class="section-header compact-header">
+                <div>
+                  <h2 id="backup-export-heading">Export specific data</h2>
+                  <p>Use smaller exports when you only need one part of the app.</p>
+                </div>
+              </div>
+              <div class="backup-export-grid" id="backup-export-actions">
+                <button class="secondary-button" type="button" data-backup-export-type="brand_brain_export">Export Brand Brain</button>
+                <button class="secondary-button" type="button" data-backup-export-type="media_metadata_export">Export media metadata</button>
+                <button class="secondary-button" type="button" data-backup-export-type="analytics_export">Export analytics</button>
+                <button class="secondary-button" type="button" data-backup-export-type="engagement_export">Export engagement</button>
+                <button class="secondary-button" type="button" data-backup-export-type="ai_memory_export">Export AI memory</button>
+                <button class="secondary-button" type="button" data-backup-export-type="safety_report_export">Export safety report</button>
+              </div>
+            </section>
+          </section>
+
+          <section class="backup-layout">
+            <section class="workspace-section backup-panel" aria-labelledby="backup-history-heading">
+              <div class="section-header compact-header">
+                <div>
+                  <h2 id="backup-history-heading">Backup history</h2>
+                  <p>Backups found in the local exports folder.</p>
+                </div>
+              </div>
+              <div class="backup-history-list" id="backup-history-list" aria-live="polite"></div>
+            </section>
+
+            <section class="workspace-section backup-panel" aria-labelledby="backup-restore-heading">
+              <div class="section-header compact-header">
+                <div>
+                  <h2 id="backup-restore-heading">Restore preview</h2>
+                  <p>Validate a backup and see what would be restored before any overwrite.</p>
+                </div>
+                <span class="card-status needs-review">Preview only</span>
+              </div>
+              <form class="backup-form" id="backup-restore-form" novalidate>
+                <label class="field">
+                  <span>Backup folder path</span>
+                  <input id="backup-restore-path" type="text" placeholder="data/exports/backups/..." required />
+                </label>
+                <button class="primary-button" type="submit">Preview restore</button>
+              </form>
+              <div class="backup-preview" id="backup-restore-preview">
+                <p class="result-meta">No restore preview loaded yet.</p>
+              </div>
+            </section>
+          </section>
         </section>
 
         <section class="route-view" id="connected-view" data-route="connected" hidden>
@@ -975,7 +1779,7 @@
             </div>
           </section>
 
-          <form class="workspace-section generate-form" id="generate-form" novalidate>
+          <form class="workspace-section generate-form" id="generate-form" aria-describedby="generate-error" novalidate>
             <div class="section-header compact-header">
               <div>
                 <h2>Build the generation request</h2>
@@ -1732,7 +2536,7 @@
                     </div>
                   </section>
 
-                  <section class="engagement-action-panel" aria-label="Local engagement actions">
+                  <section class="engagement-action-panel" aria-label="Local engagement actions" aria-describedby="engagement-action-error">
                     <h3>Local approval and action area</h3>
                     <p>Approved replies are approved locally only. Mark replied manually after handling the conversation outside this app.</p>
                     <p class="form-message success-message" id="engagement-action-message" role="status" hidden></p>
@@ -1939,7 +2743,7 @@
               <span class="card-status local-only">Local entry</span>
             </div>
 
-            <form class="analytics-manual-form" id="analytics-manual-form" novalidate>
+            <form class="analytics-manual-form" id="analytics-manual-form" aria-describedby="analytics-manual-error" novalidate>
               <label class="field"><span>Select post</span><select id="analytics-manual-post" required></select></label>
               <label class="field"><span>Platform</span><select id="analytics-manual-platform" required><option value="facebook">Facebook</option><option value="instagram">Instagram</option><option value="threads">Threads</option><option value="youtube">YouTube Shorts</option><option value="tiktok">TikTok</option><option value="linkedin">LinkedIn</option><option value="x">X</option></select></label>
               <label class="field"><span>Snapshot date</span><input id="analytics-manual-date" type="date" required /></label>

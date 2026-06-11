@@ -38,6 +38,20 @@ class SharedTypesContractTest(unittest.TestCase):
             with self.subTest(declaration=declaration):
                 self.assertIn(declaration, self.types)
 
+    def test_ai_learning_contract_includes_soft_lifecycle_and_report_sections(self):
+        self.assertIn('status: "active" | "dismissed" | "archived" | "superseded"', self.types)
+        for field_name in (
+            "underperformingPosts",
+            "engagementSummary",
+            "leadSignals",
+            "learningUpdates",
+            "nextWeekContentSuggestions",
+            "evidence",
+            "promptMetadata",
+        ):
+            with self.subTest(field_name=field_name):
+                self.assertIn(field_name, self.types)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,41 @@
+{
+  "appName": "Local Social AI Manager",
+  "windowTitle": "Local Social AI Manager",
+  "packagingDecision": "tauri_preferred_not_installed",
+  "nativeWrapperInstalled": false,
+  "preferredFutureWrapper": "tauri",
+  "fallbackFutureWrapper": "electron",
+  "devCommand": "python -m scripts.desktop.launcher --dev",
+  "buildCommand": "python -m scripts.desktop.launcher --check",
+  "previewCommand": "python -m scripts.desktop.launcher --dev --no-browser",
+  "localWebUrl": "http://127.0.0.1:8000",
+  "networkBoundary": "loopback_only",
+  "localDataDirectory": "./data",
+  "realPublishingEnabled": false,
+  "realReplySendingEnabled": false,
+  "realSocialApiCallsEnabledByDefault": false,
+  "rendererSecretAccess": "forbidden",
+  "futureSecurityRequirements": [
+    "context_isolation_required",
+    "node_integration_disabled",
+    "least_privilege_filesystem",
+    "loopback_only_local_api",
+    "no_remote_untrusted_urls",
+    "safe_folder_open_command",
+    "safe_file_picker_command",
+    "token_safe_frontend_dtos",
+    "redacted_logs"
+  ],
+  "futureDesktopCommands": [
+    "open_export_folder",
+    "open_backup_folder",
+    "select_media_files",
+    "select_local_data_directory",
+    "export_diagnostic_report"
+  ],
+  "limitations": [
+    "No native Tauri or Electron wrapper is installed yet.",
+    "The current desktop preview opens the localhost web app with the existing Python bridge.",
+    "Production installer, signing, updater, and OS keychain integration are future work."
+  ]
+}

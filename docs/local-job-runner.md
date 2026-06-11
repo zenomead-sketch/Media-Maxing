@@ -59,6 +59,8 @@ When preflight fails:
 
 Emergency pause uses `preflight_status = blocked` and keeps the item out of the ready queue.
 
+If the Safety Center kill switch disables queue processing, `run_once` exits without moving due posts or queue items. It prints a note that queue processing is disabled, and existing records stay visible for review.
+
 ## Preflight Checks
 
 The centralized preflight service checks:

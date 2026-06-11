@@ -15,11 +15,19 @@ Each report stores:
 - Concerns.
 - Recommendations.
 - Top local posts.
+- Underperforming local posts.
 - Platform breakdown.
 - Metric totals and source labels.
+- Engagement summary and lead signals.
+- Learning-memory updates.
+- Next-week content suggestions.
+- Evidence references and local-only generation metadata.
 - Generator label: `system`, `ai_mock`, `ai_provider`, or `manual`.
 
-The current generator uses only local deterministic logic. It does not call an AI provider.
+The current generator uses only local deterministic logic. It does not call an
+AI provider. `promptMetadata.generator = rule_based_local_v1`,
+`promptMetadata.aiProviderCalled = false`, and
+`promptMetadata.externalDataSent = false` make that boundary explicit.
 
 ## Provenance
 
@@ -32,6 +40,9 @@ metricTotals.sources = ["mock"]
 ```
 
 Weeks with no snapshots get an honest empty summary. Manual and future imported data retain their source labels.
+
+Engagement summaries use counts and local record IDs. Reports do not copy
+private comment or message text into learning evidence.
 
 ## Idempotency
 
@@ -56,8 +67,8 @@ date, then select **Generate weekly report**. When the localhost bridge is
 running, the report is generated from SQLite-backed local analytics and
 persists after refresh.
 
-The same panel lets the owner refresh evidence-backed AI memory and archive a
-memory record without deleting it.
+The same panel lets the owner refresh evidence-backed AI memory and dismiss or
+archive a memory record without deleting it.
 
 ## Local-First Limits
 

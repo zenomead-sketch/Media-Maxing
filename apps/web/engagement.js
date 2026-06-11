@@ -566,6 +566,24 @@
     renderReplySuggestion(item);
   }
 
+  function clearReplySuggestionDisplay() {
+    editingSuggestionId = null;
+    const text = getElement("engagement-suggestion-text");
+    text.value = "";
+    text.disabled = true;
+    setText("engagement-suggestion-tone", "-");
+    setText("engagement-suggestion-confidence", "-");
+    setText("engagement-suggestion-action", "-");
+    setText("engagement-suggestion-status", "-");
+    setText("engagement-suggestion-created", "-");
+    setText("engagement-suggestion-reason", "-");
+    getElement("engagement-suggestion-safety-flags").innerHTML = "";
+    getElement("engagement-edit-suggestion").hidden = false;
+    getElement("engagement-save-suggestion-edit").hidden = true;
+    getElement("engagement-approve-suggestion").disabled = true;
+    getElement("engagement-reject-suggestion").disabled = true;
+  }
+
   function renderReplySuggestion(item) {
     const suggestion = latestSuggestionFor(item.id);
     const empty = getElement("engagement-suggestion-empty");
@@ -573,7 +591,10 @@
     empty.hidden = Boolean(suggestion);
     content.hidden = !suggestion;
     renderReplyApprovalHistory(item.id);
-    if (!suggestion) return;
+    if (!suggestion) {
+      clearReplySuggestionDisplay();
+      return;
+    }
     const editing = editingSuggestionId === suggestion.id;
     const text = getElement("engagement-suggestion-text");
     text.value = suggestion.suggestedReply;

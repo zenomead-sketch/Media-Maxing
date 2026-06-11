@@ -93,9 +93,13 @@ class AIMemoryService:
             brand_profile_id=brand_profile_id
         )
         candidates = [
+            *self._brand_rule_candidates(brand_profile_id),
             *self._insight_candidates(brand_profile_id),
+            *self._performance_metric_candidates(brand_profile_id),
             *self._draft_review_candidates(brand_profile_id),
+            *self._engagement_pattern_candidates(brand_profile_id),
             *self._engagement_review_candidates(brand_profile_id),
+            *self._media_metadata_candidates(brand_profile_id),
         ]
         memories: list[AIMemoryRecord] = []
         created_count = 0
@@ -157,6 +161,13 @@ class AIMemoryService:
             return _row_to_memory(self._require_memory(connection, memory_id))
 
     def archive_memory(self, memory_id: str) -> AIMemoryRecord:
+        return self._update_memory_status(memory_id, "archived")
+
+    def dismiss_memory(self, memory_id: str) -> AIMemoryRecord:
+        return self._update_memory_status(memory_id, "dismissed")
+
+    def _update_memory_status(self, memory_id: str, status: str) -> AIMemoryRecord:
+        _require_choice("status", status, AI_MEMORY_STATUSES)
         now = _now_utc()
         with self._connection() as connection:
             self._require_memory(connection, memory_id)
@@ -164,12 +175,49 @@ class AIMemoryService:
                 connection.execute(
                     """
                     UPDATE ai_memory
-                    SET status = 'archived', updated_at = ?
+                    SET status = ?, updated_at = ?
                     WHERE id = ?
                     """,
-                    (now, memory_id),
+                    (status, now, memory_id),
                 )
         return self.get_memory(memory_id)
+
+    def _brand_rule_candidates(self, brand_profile_id: str) -> list[dict[str, Any]]:
+        with self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT services_json, blocked_phrases_json, supported_claims_json
+                FROM brand_profiles
+                WHERE id = ?
+                """,
+                (brand_profile_id,),
+            ).fetchone()
+        if not row:
+            return []
+        services = _decode_json(row["services_json"], [])
+        blocked_phrases = _decode_json(row["blocked_phrases_json"], [])
+        supported_claims = _decode_json(row["supported_claims_json"], [])
+        return [
+            {
+                "key": "brand-brain:guardrails",
+                "memory_type": "brand_rule",
+                "title": "Brand Brain guardrails remain the source of truth",
+                "content": (
+                    "Use the saved local Brand Brain when drafting future content. "
+                    "Respect blocked phrases and rely only on supported business claims."
+                ),
+                "evidence": {
+                    "brandProfileIds": [brand_profile_id],
+                    "serviceCount": len(services),
+                    "blockedPhraseCount": len(blocked_phrases),
+                    "supportedClaimCount": len(supported_claims),
+                    "dataPoints": 1,
+                    "localOnly": True,
+                },
+                "confidence": "low",
+                "source": "local_learning",
+            }
+        ]
 
     def _insight_candidates(self, brand_profile_id: str) -> list[dict[str, Any]]:
         with self._connection() as connection:
@@ -198,6 +246,9 @@ class AIMemoryService:
                 if raw_evidence.get("demo") or analytics_sources == {"mock"}
                 else "local_learning"
             )
+            data_points = int(
+                raw_evidence.get("dataPoints", raw_evidence.get("data_points", 0))
+            )
             candidates.append(
                 {
                     "key": f"insight:{row['id']}",
@@ -210,17 +261,79 @@ class AIMemoryService:
                         "relatedMediaAssetIds": _decode_json(
                             row["related_media_asset_ids_json"], []
                         ),
-                        "dataPoints": raw_evidence.get(
-                            "dataPoints", raw_evidence.get("data_points", 0)
-                        ),
+                        "dataPoints": data_points,
+                        "consistent": bool(raw_evidence.get("consistent", False)),
                         "analyticsSources": sorted(analytics_sources),
                         "demo": source == "mock",
                     },
-                    "confidence": row["confidence"],
+                    "confidence": _confidence(
+                        data_points,
+                        consistent=bool(raw_evidence.get("consistent", False)),
+                    ),
                     "source": source,
                 }
             )
         return candidates
+
+    def _performance_metric_candidates(
+        self, brand_profile_id: str
+    ) -> list[dict[str, Any]]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, platform, content_angle, media_asset_ids_json
+                FROM post_performance_metrics
+                WHERE brand_profile_id = ?
+                ORDER BY performance_score DESC, id ASC
+                """,
+                (brand_profile_id,),
+            ).fetchall()
+            source_rows = connection.execute(
+                """
+                SELECT DISTINCT source
+                FROM analytics_snapshots
+                WHERE brand_profile_id = ?
+                """,
+                (brand_profile_id,),
+            ).fetchall()
+        if not rows:
+            return []
+        platforms = _counts(row["platform"] for row in rows)
+        content_angles = _counts((row["content_angle"] or "unknown") for row in rows)
+        media_ids = sorted(
+            {
+                media_id
+                for row in rows
+                for media_id in _decode_json(row["media_asset_ids_json"], [])
+            }
+        )
+        sources = {row["source"] for row in source_rows}
+        data_points = len(rows)
+        consistent = _has_clear_leader(platforms, data_points)
+        return [
+            {
+                "key": "performance-metrics:summary",
+                "memory_type": "performance_learning",
+                "title": "Local post performance patterns are available for testing",
+                "content": (
+                    "Use the strongest locally measured platforms and content angles as "
+                    "ideas to test again. Comparisons are evidence, not guarantees."
+                ),
+                "evidence": {
+                    "postPerformanceMetricIds": [row["id"] for row in rows],
+                    "relatedMediaAssetIds": media_ids,
+                    "platformCounts": platforms,
+                    "contentAngleCounts": content_angles,
+                    "analyticsSources": sorted(sources),
+                    "dataPoints": data_points,
+                    "consistent": consistent,
+                    "demo": sources == {"mock"},
+                    "localOnly": True,
+                },
+                "confidence": _confidence(data_points, consistent=consistent),
+                "source": "mock" if sources == {"mock"} else "local_learning",
+            }
+        ]
 
     def _analytics_sources_for_insight(self, insight: sqlite3.Row) -> set[str]:
         related_post_ids = _decode_json(insight["related_post_ids_json"], [])
@@ -258,9 +371,9 @@ class AIMemoryService:
             ),
         }
         with self._connection() as connection:
-            rows = connection.execute(
+            log_rows = connection.execute(
                 """
-                SELECT approval_logs.id, approval_logs.action
+                SELECT approval_logs.id, approval_logs.entity_id, approval_logs.action
                 FROM approval_logs
                 JOIN generated_posts
                   ON generated_posts.id = approval_logs.entity_id
@@ -270,10 +383,23 @@ class AIMemoryService:
                 """,
                 (brand_profile_id,),
             ).fetchall()
+            post_rows = connection.execute(
+                """
+                SELECT id, approval_status
+                FROM generated_posts
+                WHERE brand_profile_id = ?
+                ORDER BY id ASC
+                """,
+                (brand_profile_id,),
+            ).fetchall()
         candidates: list[dict[str, Any]] = []
         for key, (actions, memory_type, title, content) in groups.items():
-            matching = [row["id"] for row in rows if row["action"] in actions]
-            if matching:
+            matching_logs = [row["id"] for row in log_rows if row["action"] in actions]
+            matching_posts = [
+                row["id"] for row in post_rows if row["approval_status"] in actions
+            ]
+            data_points = len(set(matching_logs) | set(matching_posts))
+            if data_points:
                 candidates.append(
                     {
                         "key": f"draft-review:{key}",
@@ -281,14 +407,76 @@ class AIMemoryService:
                         "title": title,
                         "content": content,
                         "evidence": {
-                            "approvalLogIds": matching,
-                            "dataPoints": len(matching),
+                            "approvalLogIds": matching_logs,
+                            "generatedPostIds": matching_posts,
+                            "dataPoints": data_points,
                             "localOnly": True,
                         },
-                        "confidence": _confidence(len(matching)),
+                        "confidence": _confidence(data_points, consistent=True),
                         "source": "local_learning",
                     }
                 )
+        return candidates
+
+    def _engagement_pattern_candidates(
+        self, brand_profile_id: str
+    ) -> list[dict[str, Any]]:
+        groups = {
+            "complaint": (
+                {"complaint"},
+                "safety_learning",
+                "Complaint replies need empathetic owner escalation",
+                "Acknowledge concerns calmly and escalate for owner review. "
+                "Never auto-reply to complaints.",
+            ),
+            "pricing": (
+                {"price_request"},
+                "safety_learning",
+                "Pricing questions should invite an estimate request",
+                "Invite the person to request an estimate or message the business. "
+                "Do not invent prices.",
+            ),
+            "lead": (
+                {"booking_request", "urgent"},
+                "audience_learning",
+                "Lead questions need a clear human next step",
+                "Use a concise helpful next step and keep a person in the loop. "
+                "Do not invent scheduling availability.",
+            ),
+        }
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, intent, source
+                FROM engagement_items
+                WHERE brand_profile_id = ?
+                ORDER BY received_at ASC, id ASC
+                """,
+                (brand_profile_id,),
+            ).fetchall()
+        candidates: list[dict[str, Any]] = []
+        for key, (intents, memory_type, title, content) in groups.items():
+            matching = [row for row in rows if row["intent"] in intents]
+            if not matching:
+                continue
+            sources = {row["source"] for row in matching}
+            candidates.append(
+                {
+                    "key": f"engagement-pattern:{key}",
+                    "memory_type": memory_type,
+                    "title": title,
+                    "content": content,
+                    "evidence": {
+                        "engagementItemIds": [row["id"] for row in matching],
+                        "dataPoints": len(matching),
+                        "privateEngagementContentStored": False,
+                        "demo": sources == {"mock"},
+                        "localOnly": True,
+                    },
+                    "confidence": _confidence(len(matching), consistent=True),
+                    "source": "mock" if sources == {"mock"} else "local_learning",
+                }
+            )
         return candidates
 
     def _engagement_review_candidates(self, brand_profile_id: str) -> list[dict[str, Any]]:
@@ -336,11 +524,65 @@ class AIMemoryService:
                             "privateEngagementContentStored": False,
                             "localOnly": True,
                         },
-                        "confidence": _confidence(len(matching)),
+                        "confidence": _confidence(len(matching), consistent=True),
                         "source": "local_learning",
                     }
                 )
         return candidates
+
+    def _media_metadata_candidates(self, brand_profile_id: str) -> list[dict[str, Any]]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, job_context_json, metadata_json
+                FROM media_assets
+                ORDER BY id ASC
+                """
+            ).fetchall()
+        reviewed: list[tuple[sqlite3.Row, dict[str, Any], dict[str, Any]]] = []
+        for row in rows:
+            job_context = _decode_json(row["job_context_json"], {})
+            metadata = _decode_json(row["metadata_json"], {})
+            if metadata.get("usageStatus") in {"reviewed", "ready_for_generation"}:
+                reviewed.append((row, job_context, metadata))
+        if not reviewed:
+            return []
+        content_angles = _counts(
+            job_context.get("contentAngle", "unknown")
+            for _, job_context, _ in reviewed
+        )
+        quality_values = [
+            metadata.get("qualityRating")
+            for _, _, metadata in reviewed
+            if isinstance(metadata.get("qualityRating"), int)
+        ]
+        data_points = len(reviewed)
+        consistent = _has_clear_leader(content_angles, data_points)
+        return [
+            {
+                "key": "media-metadata:reviewed-assets",
+                "memory_type": "content_preference",
+                "title": "Reviewed media metadata can guide future draft context",
+                "content": (
+                    "Prefer locally reviewed media when proposing content. Use saved content "
+                    "angles as context, then keep the owner in control of final selection."
+                ),
+                "evidence": {
+                    "relatedMediaAssetIds": [row["id"] for row, _, _ in reviewed],
+                    "contentAngleCounts": content_angles,
+                    "averageQualityRating": (
+                        round(sum(quality_values) / len(quality_values), 2)
+                        if quality_values
+                        else None
+                    ),
+                    "dataPoints": data_points,
+                    "consistent": consistent,
+                    "localOnly": True,
+                },
+                "confidence": _confidence(data_points, consistent=consistent),
+                "source": "local_learning",
+            }
+        ]
 
     def _upsert_memory(
         self,
@@ -450,12 +692,24 @@ def _row_to_memory(row: sqlite3.Row) -> AIMemoryRecord:
     )
 
 
-def _confidence(data_points: int) -> str:
+def _confidence(data_points: int, *, consistent: bool = False) -> str:
     if data_points < 5:
         return "low"
     if data_points <= 20:
         return "medium"
-    return "high"
+    return "high" if consistent else "medium"
+
+
+def _counts(values: Any) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for value in values:
+        label = str(value or "unknown")
+        counts[label] = counts.get(label, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _has_clear_leader(counts: dict[str, int], total: int) -> bool:
+    return bool(total and counts and max(counts.values()) / total >= 0.7)
 
 
 def _require_choice(field_name: str, value: str, choices: tuple[str, ...]) -> None:

@@ -12,6 +12,7 @@ from typing import Any
 
 from scripts.db.analytics_models import WEEKLY_REPORT_GENERATORS
 from scripts.db.init_db import initialize_database, resolve_database_path
+from scripts.services.ai_memory import AIMemoryService
 from scripts.services.analytics import AnalyticsService, PostPerformanceMetrics
 
 
@@ -32,8 +33,15 @@ class WeeklyReport:
     concerns: list[str]
     recommendations: list[str]
     topPosts: list[dict[str, Any]]
+    underperformingPosts: list[dict[str, Any]]
     platformBreakdown: dict[str, Any]
     metricTotals: dict[str, Any]
+    engagementSummary: dict[str, Any]
+    leadSignals: list[str]
+    learningUpdates: list[dict[str, Any]]
+    nextWeekContentSuggestions: list[str]
+    evidence: dict[str, Any]
+    promptMetadata: dict[str, Any]
     generatedBy: str
     createdAt: str
     updatedAt: str
@@ -66,6 +74,9 @@ class WeeklyReportService:
         summary = self.analytics.compute_dashboard_summary(**filters)
         platform_rows = self.analytics.compute_platform_breakdown(**filters)
         top_posts = self.analytics.identify_top_posts(limit=5, **filters)
+        underperforming_posts = self.analytics.identify_underperforming_posts(
+            limit=5, **filters
+        )
         insights = self.analytics.create_content_insights(
             brand_profile_id=brand_profile_id,
             start=week_start.isoformat(),
@@ -79,9 +90,31 @@ class WeeklyReportService:
             source=source,
         )
         generated_by = "ai_mock" if sources and sources == {"mock"} else "system"
+        engagement_summary = self._engagement_summary(
+            brand_profile_id=brand_profile_id,
+            start=week_start.isoformat(),
+            end=end_exclusive.isoformat(),
+        )
+        memory_refresh = AIMemoryService(
+            self.database_path
+        ).refresh_from_local_evidence(brand_profile_id=brand_profile_id)
         wins = _wins(summary, top_posts)
         concerns = _concerns(summary, sources)
         recommendations = _recommendations(insights)
+        lead_signals = _lead_signals(summary, engagement_summary)
+        learning_updates = [
+            {
+                "id": memory.id,
+                "memoryType": memory.memoryType,
+                "title": memory.title,
+                "confidence": memory.confidence,
+                "source": memory.source,
+            }
+            for memory in memory_refresh.memories
+        ]
+        next_week_suggestions = _next_week_suggestions(
+            recommendations, engagement_summary
+        )
         metric_totals = {
             key: value
             for key, value in summary.items()
@@ -91,6 +124,19 @@ class WeeklyReportService:
         metric_totals["demo"] = generated_by == "ai_mock"
         platform_breakdown = {
             row["platform"]: row for row in platform_rows
+        }
+        evidence = self._report_evidence(
+            brand_profile_id=brand_profile_id,
+            start=week_start.isoformat(),
+            end=end_exclusive.isoformat(),
+            source=source,
+            memory_ids=[memory.id for memory in memory_refresh.memories],
+        )
+        prompt_metadata = {
+            "generator": "rule_based_local_v1",
+            "aiProviderCalled": False,
+            "externalDataSent": False,
+            "localOnly": True,
         }
         report_id = str(
             uuid.uuid5(
@@ -107,8 +153,12 @@ class WeeklyReportService:
                       id, brand_profile_id, week_start_date, week_end_date,
                       summary, wins_json, concerns_json, recommendations_json,
                       top_posts_json, platform_breakdown_json,
-                      metric_totals_json, generated_by, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                      metric_totals_json, underperforming_posts_json,
+                      engagement_summary_json, lead_signals_json,
+                      learning_updates_json, next_week_content_suggestions_json,
+                      evidence_json, prompt_metadata_json, generated_by,
+                      created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                       summary = excluded.summary,
                       wins_json = excluded.wins_json,
@@ -117,6 +167,13 @@ class WeeklyReportService:
                       top_posts_json = excluded.top_posts_json,
                       platform_breakdown_json = excluded.platform_breakdown_json,
                       metric_totals_json = excluded.metric_totals_json,
+                      underperforming_posts_json = excluded.underperforming_posts_json,
+                      engagement_summary_json = excluded.engagement_summary_json,
+                      lead_signals_json = excluded.lead_signals_json,
+                      learning_updates_json = excluded.learning_updates_json,
+                      next_week_content_suggestions_json = excluded.next_week_content_suggestions_json,
+                      evidence_json = excluded.evidence_json,
+                      prompt_metadata_json = excluded.prompt_metadata_json,
                       generated_by = excluded.generated_by,
                       updated_at = excluded.updated_at
                     """,
@@ -132,6 +189,13 @@ class WeeklyReportService:
                         _json([asdict(post) for post in top_posts]),
                         _json(platform_breakdown),
                         _json(metric_totals),
+                        _json([asdict(post) for post in underperforming_posts]),
+                        _json(engagement_summary),
+                        _json(lead_signals),
+                        _json(learning_updates),
+                        _json(next_week_suggestions),
+                        _json(evidence),
+                        _json(prompt_metadata),
                         generated_by,
                         now,
                         now,
@@ -185,6 +249,73 @@ class WeeklyReportService:
         )
         return {snapshot.source for snapshot in snapshots}
 
+    def _engagement_summary(
+        self,
+        *,
+        brand_profile_id: str,
+        start: str,
+        end: str,
+    ) -> dict[str, Any]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, intent, priority, sentiment, source, status
+                FROM engagement_items
+                WHERE brand_profile_id = ?
+                  AND received_at >= ?
+                  AND received_at < ?
+                ORDER BY received_at ASC, id ASC
+                """,
+                (brand_profile_id, start, end),
+            ).fetchall()
+        return {
+            "totalItems": len(rows),
+            "needsReply": sum(row["status"] == "needs_reply" for row in rows),
+            "complaints": sum(row["intent"] == "complaint" for row in rows),
+            "leadSignals": sum(
+                row["intent"] in {"price_request", "booking_request", "urgent"}
+                for row in rows
+            ),
+            "urgentItems": sum(row["priority"] == "urgent" for row in rows),
+            "spamItems": sum(row["intent"] == "spam" for row in rows),
+            "sources": sorted({row["source"] for row in rows}),
+        }
+
+    def _report_evidence(
+        self,
+        *,
+        brand_profile_id: str,
+        start: str,
+        end: str,
+        source: str | None,
+        memory_ids: list[str],
+    ) -> dict[str, Any]:
+        snapshots = self.analytics.list_snapshots(
+            brand_profile_id=brand_profile_id,
+            start=start,
+            end=end,
+            source=source,
+        )
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT id
+                FROM engagement_items
+                WHERE brand_profile_id = ?
+                  AND received_at >= ?
+                  AND received_at < ?
+                ORDER BY id ASC
+                """,
+                (brand_profile_id, start, end),
+            ).fetchall()
+        return {
+            "analyticsSnapshotIds": [snapshot.id for snapshot in snapshots],
+            "engagementItemIds": [row["id"] for row in rows],
+            "learningMemoryIds": memory_ids,
+            "privateEngagementContentStored": False,
+            "localOnly": True,
+        }
+
     def _require_brand(self, brand_profile_id: str) -> None:
         with self._connection() as connection:
             found = connection.execute(
@@ -215,8 +346,17 @@ def _row_to_report(row: sqlite3.Row) -> WeeklyReport:
         concerns=_decode_json(row["concerns_json"], []),
         recommendations=_decode_json(row["recommendations_json"], []),
         topPosts=_decode_json(row["top_posts_json"], []),
+        underperformingPosts=_decode_json(row["underperforming_posts_json"], []),
         platformBreakdown=_decode_json(row["platform_breakdown_json"], {}),
         metricTotals=_decode_json(row["metric_totals_json"], {}),
+        engagementSummary=_decode_json(row["engagement_summary_json"], {}),
+        leadSignals=_decode_json(row["lead_signals_json"], []),
+        learningUpdates=_decode_json(row["learning_updates_json"], []),
+        nextWeekContentSuggestions=_decode_json(
+            row["next_week_content_suggestions_json"], []
+        ),
+        evidence=_decode_json(row["evidence_json"], {}),
+        promptMetadata=_decode_json(row["prompt_metadata_json"], {}),
         generatedBy=row["generated_by"],
         createdAt=row["created_at"],
         updatedAt=row["updated_at"],
@@ -257,6 +397,38 @@ def _recommendations(insights: list[Any]) -> list[str]:
     ]
     return values[:4] or [
         "Add manual analytics after posting so future weekly comparisons use real local entries."
+    ]
+
+
+def _lead_signals(
+    summary: dict[str, Any], engagement_summary: dict[str, Any]
+) -> list[str]:
+    signals: list[str] = []
+    if summary["totalLeads"]:
+        signals.append(
+            f"{summary['totalLeads']} lead signal(s) came from locally tracked post metrics."
+        )
+    if engagement_summary["leadSignals"]:
+        signals.append(
+            f"{engagement_summary['leadSignals']} engagement item(s) asked about pricing, booking, or urgent help."
+        )
+    return signals or ["No local lead signals were recorded for this week."]
+
+
+def _next_week_suggestions(
+    recommendations: list[str], engagement_summary: dict[str, Any]
+) -> list[str]:
+    suggestions = list(recommendations[:3])
+    if engagement_summary["complaints"]:
+        suggestions.append(
+            "Keep complaint replies empathetic and route them through owner review."
+        )
+    if engagement_summary["leadSignals"]:
+        suggestions.append(
+            "Test one reviewed post with a clear estimate-request or message-us next step."
+        )
+    return suggestions[:5] or [
+        "Collect local metrics and engagement notes before changing the content plan."
     ]
 
 

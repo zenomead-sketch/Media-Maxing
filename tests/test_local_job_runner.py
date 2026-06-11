@@ -13,6 +13,7 @@ from scripts.db.init_db import initialize_database
 from scripts.db.settings import update_app_settings
 from scripts.jobs.local_runner import LocalJobRunner
 from scripts.services.preflight import REQUIREMENT_VERSION
+from scripts.services.safety_center import SafetyCenterService
 from scripts.services.scheduling import CalendarSchedulingService
 
 
@@ -203,6 +204,27 @@ class LocalJobRunnerTest(unittest.TestCase):
         self.assertEqual(queue_row["preflight_status"], "blocked")
         self.assertIn("emergency_pause_enabled", queue_row["preflight_errors_json"])
         self.assertEqual(attempts[0]["attempt_status"], "blocked")
+
+    def test_safety_center_queue_processing_disabled_keeps_runner_idle(self):
+        db_path = self._database()
+        scheduled = self._schedule(db_path)
+        SafetyCenterService(db_path).run_kill_switch_action(
+            "disable_queue_processing",
+            actor_type="test",
+            confirmation_phrase="DISABLE QUEUE",
+        )
+
+        summary = LocalJobRunner(db_path).run_once(now="2026-01-01T12:05:00Z")
+
+        scheduled_row = self._row(db_path, "scheduled_posts", scheduled.id)
+        queue_row = self._row(db_path, "publish_queue_items", scheduled.publishQueueItemId)
+        self.assertEqual(summary.dueChecked, 0)
+        self.assertEqual(summary.queueReady, 0)
+        self.assertEqual(summary.queueBlocked, 0)
+        self.assertIn("Queue processing is disabled", " ".join(summary.notes))
+        self.assertEqual(scheduled_row["status"], "scheduled")
+        self.assertEqual(queue_row["queue_status"], "waiting")
+        self.assertEqual(len(self._attempts(db_path, scheduled.publishQueueItemId)), 0)
 
     def test_critical_safety_flag_blocks_readiness(self):
         db_path = self._database()

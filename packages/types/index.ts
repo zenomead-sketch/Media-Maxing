@@ -912,7 +912,7 @@ export interface AIMemory {
   evidence: Record<string, unknown>;
   confidence: AIMemoryConfidence;
   source: string;
-  status: "active" | "archived" | "superseded";
+  status: "active" | "dismissed" | "archived" | "superseded";
   createdAt: string;
   updatedAt: string;
 }
@@ -927,8 +927,15 @@ export interface WeeklyReport {
   concerns: string[];
   recommendations: string[];
   topPosts: Record<string, unknown>[] | string[];
+  underperformingPosts: Record<string, unknown>[];
   platformBreakdown: Record<string, unknown>;
   metricTotals: Record<string, unknown>;
+  engagementSummary: Record<string, unknown>;
+  leadSignals: string[];
+  learningUpdates: Record<string, unknown>[];
+  nextWeekContentSuggestions: string[];
+  evidence: Record<string, unknown>;
+  promptMetadata: Record<string, unknown>;
   generatedBy: WeeklyReportGeneratedBy;
   createdAt: string;
   updatedAt: string;

@@ -8,7 +8,8 @@ fallback.
 
 Available routes:
 
-- `#home`: dashboard shell.
+- `#home`: Control Center for the simplified daily workflow.
+- `#guide`: intro setup guide for Brand Brain, media, social setup, and safe workflow.
 - `#media`: local Media Library.
 - `#generate`: offline mock generation and Draft saves.
 - `#drafts`: draft approval workflow and scheduling.
@@ -20,6 +21,9 @@ Available routes:
 - `#analytics`: manual/mock analytics, weekly reports, and AI memory.
 - `#brand`: Brand Brain.
 - `#settings`: local app settings and emergency pause.
+
+The sidebar groups daily workflow, setup, and advanced tools so the existing
+screens still work without overwhelming the main Control Center view.
 
 Run `python -m apps.api.local_server --database data/app.sqlite --port 8000`
 and open `http://127.0.0.1:8000` for the SQLite-backed browser path.

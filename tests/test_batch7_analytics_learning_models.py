@@ -6,6 +6,7 @@ from contextlib import closing
 from pathlib import Path
 
 from scripts.db.analytics_models import (
+    AI_MEMORY_STATUSES,
     AI_MEMORY_TYPES,
     ANALYTICS_SOURCES,
     CONTENT_INSIGHT_STATUSES,
@@ -80,6 +81,16 @@ EXPECTED_POST_PERFORMANCE_COLUMNS = {
     "updated_at",
 }
 
+EXPECTED_WEEKLY_REPORT_LEARNING_COLUMNS = {
+    "underperforming_posts_json",
+    "engagement_summary_json",
+    "lead_signals_json",
+    "learning_updates_json",
+    "next_week_content_suggestions_json",
+    "evidence_json",
+    "prompt_metadata_json",
+}
+
 
 class Batch7AnalyticsLearningModelsTest(unittest.TestCase):
     def test_batch7_constants_are_available(self):
@@ -92,6 +103,7 @@ class Batch7AnalyticsLearningModelsTest(unittest.TestCase):
         self.assertIn("applied", CONTENT_INSIGHT_STATUSES)
         self.assertIn("ai_mock", WEEKLY_REPORT_GENERATORS)
         self.assertIn("performance_learning", AI_MEMORY_TYPES)
+        self.assertIn("dismissed", AI_MEMORY_STATUSES)
 
     def test_initialize_database_creates_batch7_tables_and_columns(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -129,6 +141,11 @@ class Batch7AnalyticsLearningModelsTest(unittest.TestCase):
                 self.assertTrue(
                     {"title", "content", "source"}.issubset(
                         self._columns(connection, "ai_memory")
+                    )
+                )
+                self.assertTrue(
+                    EXPECTED_WEEKLY_REPORT_LEARNING_COLUMNS.issubset(
+                        self._columns(connection, "weekly_reports")
                     )
                 )
 
@@ -200,13 +217,16 @@ class Batch7AnalyticsLearningModelsTest(unittest.TestCase):
 
                 weekly_report = connection.execute(
                     """
-                    SELECT generated_by, metric_totals_json
+                    SELECT generated_by, metric_totals_json, evidence_json,
+                      prompt_metadata_json
                     FROM weekly_reports
                     WHERE id = 'demo-weekly-report-2026-06-08'
                     """
                 ).fetchone()
                 self.assertEqual(weekly_report[0], "ai_mock")
                 self.assertTrue(json.loads(weekly_report[1])["demo"])
+                self.assertTrue(json.loads(weekly_report[2])["localOnly"])
+                self.assertFalse(json.loads(weekly_report[3])["externalDataSent"])
 
     def test_batch7_migration_preserves_existing_snapshot_history(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -264,6 +284,62 @@ class Batch7AnalyticsLearningModelsTest(unittest.TestCase):
                 self.assertGreater(snapshot[5], 0)
                 self.assertGreater(snapshot[6], 0)
                 self.assertTrue(json.loads(snapshot[7])["demo"])
+
+    def test_learning_loop_migration_preserves_existing_memory(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "app.sqlite"
+
+            with closing(sqlite3.connect(db_path)) as connection:
+                for migration_path in sorted(MIGRATIONS_DIR.glob("*.sql")):
+                    if migration_path.name.startswith("011_"):
+                        break
+                    connection.executescript(migration_path.read_text(encoding="utf-8"))
+                    connection.execute(
+                        "INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)",
+                        (migration_path.stem,),
+                    )
+                connection.execute(
+                    "INSERT INTO users (id, display_name) VALUES (?, ?)",
+                    ("migration-user", "Migration User"),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO brand_profiles (id, user_id, business_name)
+                    VALUES (?, ?, ?)
+                    """,
+                    ("migration-brand", "migration-user", "Migration Brand"),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO ai_memory (
+                      id, brand_profile_id, memory_type, summary, title, content,
+                      confidence, evidence_json, source, status
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "migration-memory",
+                        "migration-brand",
+                        "user_preference",
+                        "Keep a useful local preference.",
+                        "Local preference",
+                        "Keep a useful local preference.",
+                        "low",
+                        json.dumps({"localOnly": True}),
+                        "manual",
+                        "active",
+                    ),
+                )
+                connection.commit()
+
+            initialize_database(db_path)
+
+            with closing(sqlite3.connect(db_path)) as connection:
+                memory = connection.execute(
+                    "SELECT title, status, evidence_json FROM ai_memory WHERE id = ?",
+                    ("migration-memory",),
+                ).fetchone()
+                self.assertEqual(memory[:2], ("Local preference", "active"))
+                self.assertTrue(json.loads(memory[2])["localOnly"])
 
     @staticmethod
     def _columns(connection: sqlite3.Connection, table_name: str) -> set[str]:

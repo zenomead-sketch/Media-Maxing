@@ -75,7 +75,11 @@ class AIMemoryServiceTest(unittest.TestCase):
         memories = AIMemoryService(db_path).refresh_from_local_evidence(
             brand_profile_id=DEMO_BRAND_ID
         ).memories
-        safety = next(memory for memory in memories if memory.memoryType == "safety_learning")
+        safety = next(
+            memory
+            for memory in memories
+            if "replyApprovalIds" in memory.evidence
+        )
 
         self.assertEqual(safety.evidence["replyApprovalIds"], ["test-reply-audit-escalate"])
         self.assertFalse(safety.evidence["privateEngagementContentStored"])
@@ -95,6 +99,25 @@ class AIMemoryServiceTest(unittest.TestCase):
 
         self.assertEqual(archived.status, "archived")
         self.assertEqual(service.get_memory(memory.id).id, memory.id)
+
+    def test_manual_memory_can_be_dismissed_without_deletion(self):
+        db_path = self._database()
+        service = AIMemoryService(db_path)
+
+        memory = service.create_manual_memory(
+            brand_profile_id=DEMO_BRAND_ID,
+            memory_type="user_preference",
+            title="Prefer concise educational posts",
+            content="Test concise educational posts while keeping owner review required.",
+        )
+        dismissed = service.dismiss_memory(memory.id)
+
+        self.assertEqual(dismissed.status, "dismissed")
+        self.assertEqual(service.get_memory(memory.id).id, memory.id)
+        self.assertNotIn(
+            memory.id,
+            [item.id for item in service.list_memories(brand_profile_id=DEMO_BRAND_ID)],
+        )
 
     def test_cli_refresh_is_local_only(self):
         db_path = self._database()

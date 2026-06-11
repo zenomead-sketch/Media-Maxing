@@ -235,6 +235,37 @@ Stores local health/readiness snapshots for scaffolded or mock connectors.
 - Health checks must not call real platform APIs unless future integration flags explicitly allow it.
 - Health check rows must not contain secrets or raw provider responses.
 
+## onboarding_state
+
+### Purpose
+
+Stores first-run onboarding progress and setup checklist overrides for the local app. The MVP uses one row with `id = default`.
+
+### Important Fields
+
+- `id`: primary key.
+- `status`: `not_started`, `in_progress`, `completed`, or `skipped`.
+- `current_step`: current onboarding step ID.
+- `completed_steps_json`: completed step IDs.
+- `skipped_steps_json`: skipped step IDs.
+- `checklist_overrides_json`: optional per-checklist status overrides.
+- `started_at`: optional first-start timestamp.
+- `completed_at`: optional completion timestamp.
+- `skipped_at`: optional skip timestamp.
+- `created_at`: creation timestamp.
+- `updated_at`: last update timestamp.
+
+### Relationships
+
+- Onboarding completion may create or update `brand_profiles` and safe `app_settings`.
+- Checklist computation reads existing Brand Brain, media, drafts, schedules, queue, analytics, and connected account records.
+
+### Privacy/Security Notes
+
+- Onboarding must not store API keys, OAuth tokens, client secrets, or raw credentials.
+- Skipping or restarting onboarding must not delete existing user data.
+- Real publishing and real replies remain disabled after onboarding.
+
 ## media_assets
 
 ### Purpose
@@ -782,6 +813,12 @@ Stores local weekly summaries for later reporting screens.
 - `summary`: plain-language overview.
 - `wins_json`, `concerns_json`, and `recommendations_json`: structured report sections.
 - `top_posts_json`, `platform_breakdown_json`, and `metric_totals_json`: local summary data.
+- `underperforming_posts_json`: locally tracked posts with the weakest current comparison scores.
+- `engagement_summary_json` and `lead_signals_json`: local weekly engagement counts and plain-language lead signals.
+- `learning_updates_json`: memory summaries refreshed while the report was generated.
+- `next_week_content_suggestions_json`: conservative ideas to test during the next week.
+- `evidence_json`: local record IDs used to explain the report.
+- `prompt_metadata_json`: records that the current generator is local rule-based and sends no data externally.
 - `generated_by`: `system`, `ai_mock`, `ai_provider`, or `manual`.
 - `created_at`: creation timestamp.
 - `updated_at`: last update timestamp.
@@ -830,6 +867,31 @@ The approval queue service records structured action metadata in `changed_fields
 - Do not use approval logs to bypass future approval requirements.
 - Editing an approved draft should create `edited_requires_reapproval`, set the draft back to `needs_review`, and preserve the edited fields in `changed_fields_json`.
 
+## safety_audit_logs
+
+### Purpose
+
+Stores local audit history for Safety Center actions, emergency pause changes, and kill-switch controls.
+
+### Important Fields
+
+- `id`: primary key.
+- `action`: safety action such as `emergency_pause_enabled`, `emergency_pause_disabled`, `automation_level_changed`, `kill_switch_action_started`, `kill_switch_action_completed`, `queue_processing_disabled`, `accounts_disconnected`, `tokens_marked_revoked`, `scheduled_posts_canceled`, `ai_generation_disabled`, or `safety_report_exported`.
+- `actor_type`: `user`, `system`, `ai`, or `test`.
+- `details_json`: safe structured metadata about the local action.
+- `created_at`: creation timestamp.
+
+### Relationships
+
+- May reference scheduled posts, queue items, social accounts, or settings through IDs in `details_json`.
+- Is read by the Safety Center screen and diagnostics reports.
+
+### Privacy/Security Notes
+
+- Safety audit logs must not include API keys, access tokens, refresh tokens, authorization codes, client secrets, bearer tokens, raw OAuth state values, or raw provider responses.
+- Kill-switch actions should prefer reversible local state changes.
+- The full local reset action is a placeholder and must not permanently delete data without a future backup-and-confirmation flow.
+
 ## ai_memory
 
 ### Purpose
@@ -847,7 +909,7 @@ Stores learning records from approvals, rejections, analytics, engagement, media
 - `confidence`: `low`, `medium`, or `high`.
 - `evidence_json`: supporting record IDs or summarized evidence.
 - `source`: provenance label such as `mock`, `manual`, or a future learning-service source.
-- `status`: `active`, `archived`, or `superseded`.
+- `status`: `active`, `dismissed`, `archived`, or `superseded`.
 - `created_at`: creation timestamp.
 - `updated_at`: last update timestamp.
 
@@ -859,6 +921,7 @@ Stores learning records from approvals, rejections, analytics, engagement, media
 ### Privacy/Security Notes
 
 - Do not delete memory automatically.
+- Dismissed and archived memory remain stored for audit value but are excluded from active generation context.
 - Store evidence so the app can explain why it learned something.
 - Be honest when data is weak.
 - AI memory should not convert weak patterns into unsupported claims.

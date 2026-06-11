@@ -68,6 +68,14 @@ class WeeklyReportServiceTest(unittest.TestCase):
         self.assertGreaterEqual(len(report.recommendations), 1)
         self.assertIn("instagram", report.platformBreakdown)
         self.assertGreaterEqual(len(report.topPosts), 1)
+        self.assertGreaterEqual(len(report.underperformingPosts), 1)
+        self.assertGreaterEqual(len(report.leadSignals), 1)
+        self.assertGreaterEqual(len(report.learningUpdates), 1)
+        self.assertGreaterEqual(len(report.nextWeekContentSuggestions), 1)
+        self.assertIn("analyticsSnapshotIds", report.evidence)
+        self.assertFalse(report.evidence["privateEngagementContentStored"])
+        self.assertEqual(report.promptMetadata["generator"], "rule_based_local_v1")
+        self.assertFalse(report.promptMetadata["aiProviderCalled"])
 
     def test_cli_generation_is_local_only(self):
         db_path = self._database()

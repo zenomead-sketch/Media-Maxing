@@ -44,6 +44,8 @@ EXPECTED_TABLES = {
     "weekly_reports",
     "approval_logs",
     "ai_memory",
+    "onboarding_state",
+    "safety_audit_logs",
 }
 
 EXPECTED_SCHEDULED_POST_COLUMNS = {

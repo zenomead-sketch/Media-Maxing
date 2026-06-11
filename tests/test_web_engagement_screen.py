@@ -142,6 +142,11 @@ class WebEngagementScreenTest(unittest.TestCase):
             with self.subTest(class_name=class_name):
                 self.assertIn(class_name, self.styles)
 
+    def test_empty_reply_state_hides_and_clears_stale_suggestion_content(self):
+        self.assertIn(".engagement-suggestion-content[hidden]", self.styles)
+        self.assertIn("function clearReplySuggestionDisplay()", self.script)
+        self.assertIn("clearReplySuggestionDisplay();", self.script)
+
 
 if __name__ == "__main__":
     unittest.main()

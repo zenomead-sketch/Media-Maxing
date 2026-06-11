@@ -752,7 +752,9 @@
           <p>${escapeHtml(report.summary || "No summary available.")}</p>
           <p><strong>Wins:</strong> ${escapeHtml((report.wins || []).join(" "))}</p>
           <p><strong>Concerns:</strong> ${escapeHtml((report.concerns || []).join(" "))}</p>
-          <p><strong>Next:</strong> ${escapeHtml((report.recommendations || []).join(" "))}</p>
+          <p><strong>Lead signals:</strong> ${escapeHtml((report.leadSignals || []).join(" "))}</p>
+          <p><strong>Engagement:</strong> ${escapeHtml(`${report.engagementSummary?.totalItems || 0} item(s), ${report.engagementSummary?.complaints || 0} complaint(s), ${report.engagementSummary?.leadSignals || 0} lead question(s).`)}</p>
+          <p><strong>Next:</strong> ${escapeHtml((report.nextWeekContentSuggestions || report.recommendations || []).join(" "))}</p>
         </article>
       `).join("")
       : '<p class="media-state empty-state">No weekly reports yet. Generate one from local analytics.</p>';
@@ -771,7 +773,12 @@
             <span>Confidence: ${escapeHtml(memory.confidence || "low")}</span>
             <span>Source: ${escapeHtml(formatStatus(memory.source || "local_learning"))}</span>
           </div>
-          ${memory.status === "active" ? `<button class="secondary-button" type="button" data-ai-memory-archive="${escapeHtml(memory.id)}">Archive memory</button>` : ""}
+          ${memory.status === "active" ? `
+            <div class="analytics-insight-actions">
+              <button class="secondary-button" type="button" data-ai-memory-action="dismiss" data-ai-memory-id="${escapeHtml(memory.id)}">Dismiss</button>
+              <button class="secondary-button" type="button" data-ai-memory-action="archive" data-ai-memory-id="${escapeHtml(memory.id)}">Archive</button>
+            </div>
+          ` : ""}
         </article>
       `).join("")
       : '<p class="media-state empty-state">No AI memory yet. Refresh from local evidence after reviewing analytics or drafts.</p>';
@@ -797,6 +804,13 @@
       wins: summary.posts ? [`Current best platform idea to test: ${formatStatus(summary.bestPlatform)}.`] : ["No clear win yet."],
       concerns: ["Direct-file mode uses local demo data. Run the localhost bridge for durable SQLite reports."],
       recommendations: ["Add manual analytics after real posting to strengthen future comparisons."],
+      underperformingPosts: identifyUnderperformingPosts(records),
+      engagementSummary: { totalItems: 0, complaints: 0, leadSignals: 0 },
+      leadSignals: summary.leads ? [`${summary.leads} local demo lead signal(s) recorded.`] : ["No local lead signals recorded."],
+      learningUpdates: [],
+      nextWeekContentSuggestions: ["Add manual analytics after real posting to strengthen future comparisons."],
+      evidence: { localOnly: true, privateEngagementContentStored: false },
+      promptMetadata: { generator: "rule_based_browser_demo_v1", aiProviderCalled: false, externalDataSent: false, localOnly: true },
       generatedBy: "ai_mock",
     };
   }
@@ -852,24 +866,26 @@
   }
 
   async function archiveAIMemory(event) {
-    const button = event.target.closest("[data-ai-memory-archive]");
+    const button = event.target.closest("[data-ai-memory-action]");
     if (!button) return;
+    const action = button.dataset.aiMemoryAction;
+    const memoryId = button.dataset.aiMemoryId;
     try {
       const bridge = activeApiBridge();
       if (bridge) {
-        await bridge.request(`/api/ai-memory/${encodeURIComponent(button.dataset.aiMemoryArchive)}/archive`, {
+        await bridge.request(`/api/ai-memory/${encodeURIComponent(memoryId)}/${encodeURIComponent(action)}`, {
           method: "POST",
           body: {},
         });
         await bridge.sync();
       } else {
         saveAIMemory(loadAIMemory().map((memory) => (
-          memory.id === button.dataset.aiMemoryArchive
-            ? { ...memory, status: "archived", updatedAt: new Date().toISOString() }
+          memory.id === memoryId
+            ? { ...memory, status: action === "dismiss" ? "dismissed" : "archived", updatedAt: new Date().toISOString() }
             : memory
         )));
       }
-      setLearningMessage("AI memory archived locally. It was not deleted.");
+      setLearningMessage(`AI memory ${action === "dismiss" ? "dismissed" : "archived"} locally. It was not deleted.`);
       renderLearningReview();
     } catch (error) {
       setLearningMessage(error.message || "AI memory could not be archived.");

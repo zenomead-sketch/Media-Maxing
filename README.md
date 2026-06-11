@@ -2,9 +2,108 @@
 
 A local-first AI social media manager for small businesses, local service businesses, and owner-operators.
 
+Release label: `0.1.0-local-test`
+
 This project has a local-first MVP foundation with a static web shell, SQLite
 services, and a localhost bridge. It does not publish real posts, send real
 replies, or connect real platform APIs by default.
+
+Real publishing remains disabled.
+
+## Quick Start
+
+```text
+python -m scripts.db.init_db --database data/app.sqlite
+python -m scripts.db.seed_demo --database data/app.sqlite
+python -m apps.api.local_server --database data/app.sqlite --port 8000
+```
+
+Then open `http://127.0.0.1:8000`.
+
+Start with the Intro Setup Guide or Onboarding for a fresh database, or use seeded demo data to explore the Control Center, Brand Brain, Media Library, Generate, Drafts, Calendar, Publish Queue, Analytics, Engagement Inbox, Safety Center, Backup & Data, and Diagnostics.
+
+## Launch candidate status
+
+Current status: partial local test release.
+
+What passed in the latest launch check:
+
+- Database and seed smoke.
+- Core local workflow smoke.
+- Safety workflow smoke.
+- Backup and diagnostics export scan.
+- Redacted security scan.
+- Unit tests, Python compile checks, and web JavaScript syntax checks.
+
+Why it is partial:
+
+- There is no `package.json` or frontend build command yet.
+- There is no production desktop installer yet.
+- A final human browser QA pass is still required before broader testing.
+
+Run the launch checks:
+
+```text
+python -m scripts.launch_check
+python -m scripts.qa.integration_security_scan .
+```
+
+## Mock Mode
+
+Mock mode is the default safe path. It supports mock AI generation, mock OAuth, mock analytics, mock engagement, and local-only workflow testing without API keys.
+
+Manual Export is the safe posting path. It creates local posting packages and does not publish automatically.
+
+## Main workflows
+
+1. Create or confirm Brand Brain.
+2. Add or seed Media Library items.
+3. Generate mock drafts.
+4. Save drafts to Drafts.
+5. Approve safe drafts locally.
+6. Schedule approved drafts on Calendar.
+7. Run local jobs and preflight.
+8. Use Publish Queue and Manual Export.
+9. Add manual analytics or generate mock analytics.
+10. Generate mock engagement and local reply suggestions.
+11. Approve replies locally only.
+12. Generate AI memory and weekly reports.
+13. Use Safety Center, Backup & Data, and Diagnostics before launch testing.
+
+## Safety statement
+
+The app is designed around approval required, local-first data, mock mode, manual export, and emergency pause. Real publishing and real reply sending require a future explicit build track with safety gates, secure tokens, platform verification, app review, preflight, audit logs, rollback handling, and tests.
+
+## Final handoff docs
+
+- `CHANGELOG.md`
+- `RELEASE_NOTES.md`
+- `TODO.md`
+- `docs/handoff-summary.md`
+- `docs/next-build-plan.md`
+- `docs/known-limitations.md`
+- `docs/future-real-publishing-plan.md`
+- `docs/launch-candidate-checklist.md`
+
+## Docs index
+
+- Getting started: `docs/non-coder-setup.md`
+- Intro setup guide: `docs/intro-setup-guide.md`
+- User guide: `docs/user-guide.md`
+- Operator manual: `docs/operator-manual.md`
+- Common workflows: `docs/common-workflows.md`
+- Troubleshooting: `docs/troubleshooting.md`
+- Privacy and local data: `docs/privacy-and-local-data.md`
+- Safety controls: `docs/safety-controls.md`
+- Backup and Data: `docs/backup-and-data.md`
+- Diagnostics: `docs/diagnostics.md`
+- Desktop packaging: `docs/desktop-packaging.md`
+- Glossary: `docs/glossary.md`
+- Handoff summary: `docs/handoff-summary.md`
+- Next build plan: `docs/next-build-plan.md`
+- Known limitations: `docs/known-limitations.md`
+- Future real publishing plan: `docs/future-real-publishing-plan.md`
+- Launch checklist: `docs/launch-candidate-checklist.md`
 
 ## Project Purpose
 
@@ -41,7 +140,8 @@ Planned core features:
 - Backup, export, and diagnostics tools.
 
 Current completed feature level: local SQLite workflows through Batch 7
-recovery, with real publishing and real reply sending intentionally disabled.
+recovery plus first-run onboarding/checklist work in Batch 8, with real
+publishing and real reply sending intentionally disabled.
 
 ## Local-First Privacy Approach
 
@@ -83,7 +183,8 @@ Possible later direction from `AGENTS.md`:
 
 Planned app modules:
 
-- Home
+- Control Center (`#home`)
+- Intro Setup Guide (`#guide`)
 - Onboarding
 - Brand Brain
 - Media Library
@@ -135,6 +236,7 @@ For now:
 4. Follow the batch prompts in order.
 5. Run `python -m apps.api.local_server --database data/app.sqlite --port 8000`.
 6. Open `http://127.0.0.1:8000` for the SQLite-backed web shell.
+7. On a fresh database, start with the Onboarding screen and setup checklist.
 
 The localhost server automatically loads a repo-root `.env` file when it
 exists. Use `--env-file PATH` only when a different local file is needed.
@@ -143,6 +245,21 @@ Opening `apps/web/index.html` directly remains available as a browser-only demo
 fallback. See `docs/local-api-bridge.md`.
 
 Python services provide the local SQLite database, scheduling, preflight, job runner, and manual export behavior.
+
+For first-run setup details, see `docs/onboarding.md`.
+For emergency pause, kill switch, and Safety Center behavior, see
+`docs/safety-controls.md`.
+For local backups, exports, and restore preview, see `docs/backup-and-data.md`.
+For app health checks and redacted troubleshooting reports, see
+`docs/diagnostics.md`.
+For desktop packaging readiness, see `docs/desktop-packaging.md`.
+For the plain-language user guide, see `docs/user-guide.md`.
+For non-coder setup, see `docs/non-coder-setup.md`.
+For daily operating steps, see `docs/operator-manual.md`.
+For step-by-step workflows, see `docs/common-workflows.md`.
+For troubleshooting, see `docs/troubleshooting.md`.
+For privacy and local data handling, see `docs/privacy-and-local-data.md`.
+For definitions, see `docs/glossary.md`.
 
 ## Development Commands
 
@@ -162,6 +279,10 @@ python -m scripts.services.analytics --database data/app.sqlite --generate-mock
 python -m scripts.services.engagement --database data/app.sqlite --brand-profile-id demo-brand-brightside-exterior-care --ingest-mock
 python -m scripts.services.ai_memory --database data/app.sqlite --brand-profile-id demo-brand-brightside-exterior-care
 python -m scripts.services.weekly_reports --database data/app.sqlite --brand-profile-id demo-brand-brightside-exterior-care --week-start-date 2026-06-08
+python -m scripts.services.ai_learning --database data/app.sqlite --brand-profile-id demo-brand-brightside-exterior-care --week-start-date 2026-06-08
+python -m scripts.services.diagnostics --database data/app.sqlite --export
+python -m scripts.desktop.launcher --check
+python -m scripts.desktop.launcher --dev
 python -m unittest tests.test_integration_flags
 python -m unittest tests.test_platform_http_client
 python -m unittest tests.test_integration_setup_service
@@ -189,6 +310,8 @@ npm run desktop:build
 ```
 
 These commands are examples only until the project tooling is created.
+For current desktop readiness, use the Python `scripts.desktop.launcher`
+commands above. The npm desktop commands do not exist yet.
 
 ## Environment Variables
 
@@ -309,6 +432,8 @@ Current status:
 - Local weekly report service now upserts one deterministic report per brand and week, preserving mock/manual provenance and labeling mock-only reports as `ai_mock`.
 - The localhost Generate screen now runs through the Python content-generation service, loading Brand Brain, selected media metadata, app settings, and bounded active AI-memory summaries from SQLite before the user explicitly saves drafts.
 - The Analytics screen now exposes weekly report generation and reviewable AI-memory summaries, including local refresh and archive actions through the SQLite bridge.
+- Batch 8 onboarding, Safety Center, Backup & Data, and Diagnostics screens now provide first-run guidance, emergency pause controls, local backup/export, and redacted app health reports.
+- Desktop readiness scaffold exists with a Python loopback preview launcher and Tauri-preferred packaging documentation; no production installer exists yet.
 
 Batch 4 docs:
 
@@ -342,18 +467,34 @@ Batch 6 integration safety docs:
 Batch 7 local learning and inbox docs:
 
 - `docs/analytics.md`
+- `docs/manual-analytics-entry.md`
+- `docs/mock-analytics.md`
 - `docs/engagement-inbox.md`
 - `docs/reply-suggestions.md`
 - `docs/reply-approval-workflow.md`
 - `docs/ai-learning-loop.md`
 - `docs/weekly-reports.md`
+- `docs/batch7-local-workflow.md`
+
+Batch 8 hardening docs:
+
+- `docs/user-guide.md`
+- `docs/non-coder-setup.md`
+- `docs/operator-manual.md`
+- `docs/common-workflows.md`
+- `docs/troubleshooting.md`
+- `docs/privacy-and-local-data.md`
+- `docs/onboarding.md`
+- `docs/safety-controls.md`
+- `docs/backup-and-data.md`
+- `docs/diagnostics.md`
+- `docs/desktop-packaging.md`
+- `docs/glossary.md`
 
 Not built yet:
 
-- Desktop app.
+- Production desktop installer or native Tauri/Electron wrapper.
 - AI media analysis and auto-tagging.
 - Real social integrations and real OAuth token exchange.
 - Desktop file-picker hardening for packaged-app media import.
-- Safety Center.
-- Backup and diagnostics.
 - Package-manager based lint/typecheck/build commands.

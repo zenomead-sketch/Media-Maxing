@@ -110,6 +110,8 @@ Never expose, log, commit, print, or include in frontend responses:
 
 Backups and diagnostics must redact secrets by default.
 
+Local backups are created under the app data directory and are never uploaded by the MVP. Structured exports and sanitized SQLite backups exclude raw OAuth tokens, encrypted token blobs, refresh tokens, access tokens, authorization codes, API keys, client secrets, and bearer tokens by default. Restore must be previewed before any overwrite, and destructive restore must create a pre-restore backup before it is implemented.
+
 ## Approval Defaults
 
 MVP defaults:

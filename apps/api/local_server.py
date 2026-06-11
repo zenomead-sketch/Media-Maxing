@@ -45,18 +45,23 @@ from scripts.db.media_storage import (
     update_media_asset_metadata,
 )
 from scripts.db.settings import load_app_settings, update_app_settings
+from scripts.services.ai_learning import AILearningService
 from scripts.services.ai_memory import AIMemoryService
 from scripts.services.analytics import AnalyticsService
 from scripts.services.approval_queue import ApprovalQueueService
+from scripts.services.backup import BackupService, BackupServiceError
 from scripts.services.content_generation import ContentGenerationService
+from scripts.services.diagnostics import DiagnosticsService, redact_diagnostic_text
 from scripts.services.engagement import EngagementService
 from scripts.services.integration_setup import validate_social_integration_setup
 from scripts.services.local_env import load_local_env_file
 from scripts.services.manual_export import ManualExportService
 from scripts.services.oauth_flow import OAuthFlowService
+from scripts.services.onboarding import OnboardingService
 from scripts.services.publish_queue import PublishQueueService
 from scripts.services.reply_approvals import ReplyApprovalService
 from scripts.services.reply_suggestions import ReplySuggestionService
+from scripts.services.safety_center import SafetyCenterService
 from scripts.services.scheduling import (
     CalendarSchedulingService,
     _row_to_queue_item,
@@ -140,6 +145,108 @@ class LocalApiApplication:
             return self._bootstrap()
         if segments == ["api", "integration-setup"] and method == "GET":
             return validate_social_integration_setup().to_dict()
+        if segments == ["api", "diagnostics"]:
+            diagnostics = DiagnosticsService(self.database_path)
+            if method == "GET":
+                return diagnostics.run_checks()
+        if segments == ["api", "diagnostics", "export"] and method == "POST":
+            recent_errors = body.get("recentErrors") or body.get("recent_errors") or []
+            if not isinstance(recent_errors, list):
+                recent_errors = []
+            return DiagnosticsService(self.database_path).export_report(
+                recent_errors=[str(error) for error in recent_errors[:25]],
+            )
+        if segments == ["api", "onboarding"]:
+            onboarding = OnboardingService(self.database_path)
+            if method == "GET":
+                return onboarding.get_state().to_dict()
+            if method == "PATCH":
+                return onboarding.update_progress(
+                    current_step=body.get("current_step") or body.get("currentStep"),
+                    completed_steps=body.get("completed_steps")
+                    or body.get("completedSteps"),
+                    skipped_steps=body.get("skipped_steps") or body.get("skippedSteps"),
+                    status=body.get("status"),
+                ).to_dict()
+        if len(segments) == 3 and segments[:2] == ["api", "onboarding"] and method == "POST":
+            onboarding = OnboardingService(self.database_path)
+            action = segments[2]
+            if action == "complete":
+                return onboarding.complete(body).to_dict()
+            if action == "skip":
+                return onboarding.skip(reason=body.get("reason")).to_dict()
+            if action == "restart":
+                return onboarding.restart().to_dict()
+        if segments == ["api", "safety-center"]:
+            safety = SafetyCenterService(self.database_path)
+            if method == "GET":
+                return safety.get_state()
+        if segments == ["api", "safety-center", "audit-logs"] and method == "GET":
+            return SafetyCenterService(self.database_path).list_audit_logs()
+        if segments == ["api", "backups"]:
+            backups = BackupService(self.database_path)
+            if method == "GET":
+                return backups.list_backups()
+            if method == "POST":
+                try:
+                    return backups.create_backup(
+                        backup_type=body.get("backup_type")
+                        or body.get("backupType")
+                        or "full_local_backup",
+                        backup_name=body.get("backup_name") or body.get("backupName"),
+                        include_media=bool(
+                            body.get("include_media") or body.get("includeMedia")
+                        ),
+                        include_token_metadata=bool(
+                            body.get("include_token_metadata")
+                            or body.get("includeTokenMetadata")
+                        ),
+                        include_sensitive_tokens=bool(
+                            body.get("include_sensitive_tokens")
+                            or body.get("includeSensitiveTokens")
+                        ),
+                    )
+                except BackupServiceError as error:
+                    raise LocalApiError(str(error), error_codes=error.error_codes) from error
+        if segments == ["api", "backups", "restore-preview"] and method == "POST":
+            try:
+                return BackupService(self.database_path).preview_restore(
+                    _required(body, "backupPath")
+                    if "backupPath" in body
+                    else _required(body, "backup_path")
+                )
+            except BackupServiceError as error:
+                raise LocalApiError(str(error), error_codes=error.error_codes) from error
+        if segments == ["api", "safety-center", "emergency-pause"] and method == "POST":
+            if "enabled" not in body:
+                raise LocalApiError(
+                    "enabled is required.",
+                    error_codes=["enabled_required"],
+                )
+            return SafetyCenterService(self.database_path).set_emergency_pause(
+                bool(body.get("enabled")),
+                actor_type=body.get("actor_type") or body.get("actorType") or "user",
+                reason=body.get("reason"),
+            )
+        if segments == ["api", "safety-center", "automation-level"] and method == "POST":
+            return SafetyCenterService(self.database_path).set_automation_level(
+                _required(body, "automation_level")
+                if "automation_level" in body
+                else _required(body, "automationLevel"),
+                actor_type=body.get("actor_type") or body.get("actorType") or "user",
+                reason=body.get("reason"),
+            )
+        if (
+            len(segments) == 4
+            and segments[:3] == ["api", "safety-center", "kill-switch"]
+            and method == "POST"
+        ):
+            return SafetyCenterService(self.database_path).run_kill_switch_action(
+                segments[3],
+                actor_type=body.get("actor_type") or body.get("actorType") or "user",
+                confirmation_phrase=body.get("confirmation_phrase")
+                or body.get("confirmationPhrase"),
+            )
         if segments == ["api", "settings"]:
             if method == "GET":
                 return asdict(load_app_settings(self.database_path))
@@ -331,8 +438,8 @@ class LocalApiApplication:
                 status=query.get("status", "active"),
             )
         if segments == ["api", "ai-memory", "refresh"] and method == "POST":
-            return AIMemoryService(self.database_path).refresh_from_local_evidence(
-                brand_profile_id=_required(body, "brand_profile_id"),
+            return AILearningService(self.database_path).updateLearningMemory(
+                brandProfileId=_required(body, "brand_profile_id"),
             )
         if (
             len(segments) == 4
@@ -340,15 +447,22 @@ class LocalApiApplication:
             and segments[3] == "archive"
             and method == "POST"
         ):
-            return AIMemoryService(self.database_path).archive_memory(segments[2])
+            return AILearningService(self.database_path).archiveMemory(segments[2])
+        if (
+            len(segments) == 4
+            and segments[:2] == ["api", "ai-memory"]
+            and segments[3] == "dismiss"
+            and method == "POST"
+        ):
+            return AILearningService(self.database_path).dismissMemory(segments[2])
         if segments == ["api", "weekly-reports"]:
             reports = WeeklyReportService(self.database_path)
             if method == "GET":
                 return reports.list_reports(brand_profile_id=query.get("brand_profile_id"))
             if method == "POST":
-                return reports.generate_report(
-                    brand_profile_id=_required(body, "brand_profile_id"),
-                    week_start_date=_required(body, "week_start_date"),
+                return AILearningService(self.database_path).generateWeeklyReport(
+                    brandProfileId=_required(body, "brand_profile_id"),
+                    weekStartDate=_required(body, "week_start_date"),
                     source=body.get("source"),
                 )
         if len(segments) >= 3 and segments[:2] == ["api", "connect"]:
@@ -380,12 +494,10 @@ class LocalApiApplication:
             return assets
 
         def load_memory(profile_id: str) -> list[dict[str, Any]]:
-            return [
-                asdict(memory)
-                for memory in AIMemoryService(self.database_path).list_memories(
-                    brand_profile_id=profile_id,
-                    status="active",
-                )
+            return AILearningService(
+                self.database_path
+            ).applyLearningToGenerationContext(brandProfileId=profile_id)[
+                "activeAIMemory"
             ]
 
         bundle = ContentGenerationService(
@@ -510,6 +622,8 @@ class LocalApiApplication:
 
     def _bootstrap(self) -> dict[str, Any]:
         brands = list_brand_profiles(self.database_path)
+        onboarding = OnboardingService(self.database_path).get_state()
+        safety_center = SafetyCenterService(self.database_path).get_state()
         engagement = EngagementService(self.database_path)
         engagement_items = engagement.list_items()
         suggestions = ReplySuggestionService(self.database_path)
@@ -517,6 +631,9 @@ class LocalApiApplication:
         analytics = AnalyticsService(self.database_path)
         return {
             "settings": asdict(load_app_settings(self.database_path)),
+            "onboarding": onboarding.to_dict(),
+            "setupChecklist": onboarding.checklist,
+            "safetyCenter": safety_center,
             "brandProfile": asdict(brands[0]) if brands else None,
             "mediaAssets": [asset.to_dict() for asset in list_media_assets(self.database_path)],
             "drafts": [draft.to_dict() for draft in list_generated_drafts(self.database_path)],
@@ -548,7 +665,9 @@ class LocalApiApplication:
             ],
             "aiMemory": AIMemoryService(self.database_path).list_memories(status=None),
             "weeklyReports": WeeklyReportService(self.database_path).list_reports(),
+            "backupHistory": BackupService(self.database_path).list_backups(),
             "integrationSetup": validate_social_integration_setup().to_dict(),
+            "diagnostics": DiagnosticsService(self.database_path).run_checks(),
             "localOnly": True,
             "realPublishing": False,
             "realReplySending": False,
@@ -708,7 +827,7 @@ class LocalApiRequestHandler(BaseHTTPRequestHandler):
                 error.status,
                 {
                     "ok": False,
-                    "error": str(error),
+                    "error": redact_diagnostic_text(str(error)),
                     "errorCodes": error.error_codes,
                 },
             )

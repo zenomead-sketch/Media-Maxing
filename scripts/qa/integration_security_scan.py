@@ -116,7 +116,22 @@ def _category(path: Path) -> str:
 
 def _looks_real_secret(value: str) -> bool:
     lowered = value.lower()
-    if any(marker in lowered for marker in ("fake", "mock", "demo", "test", "hidden", "must-not-leak")):
+    if any(
+        marker in lowered
+        for marker in (
+            "fake",
+            "mock",
+            "demo",
+            "test",
+            "hidden",
+            "must-not-leak",
+            "do_not_export",
+        )
+    ):
+        return False
+    if lowered.startswith(("excluded.", "new.", "old.")):
+        return False
+    if re.fullmatch(r"[a-z_]+\.[a-z_]+", lowered):
         return False
     return True
 

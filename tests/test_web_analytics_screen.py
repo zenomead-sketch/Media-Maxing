@@ -111,6 +111,10 @@ class WebAnalyticsScreenTest(unittest.TestCase):
         self.assertIn("local-social-ai-manager.analyticsSnapshots", self.script)
         self.assertIn('source: "mock"', self.script)
         self.assertIn('source: "manual"', self.script)
+        self.assertIn('data-ai-memory-action="dismiss"', self.script)
+        self.assertIn("nextWeekContentSuggestions", self.script)
+        self.assertIn("engagementSummary", self.script)
+        self.assertIn("leadSignals", self.script)
         self.assertNotIn("fetch(", self.script)
 
     def test_analytics_css_classes_present(self):

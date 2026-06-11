@@ -1,5 +1,11 @@
 (function () {
   const STORAGE_KEY = "local-social-ai-manager.settings";
+  const ONBOARDING_STORAGE_KEY = "local-social-ai-manager.onboarding";
+  const SETUP_CHECKLIST_KEY = "local-social-ai-manager.setupChecklist";
+  const SAFETY_CENTER_STORAGE_KEY = "local-social-ai-manager.safetyCenter";
+  const BACKUP_STORAGE_KEY = "local-social-ai-manager.backupHistory";
+  const DIAGNOSTICS_STORAGE_KEY = "local-social-ai-manager.diagnostics";
+  const RECENT_ERRORS_STORAGE_KEY = "local-social-ai-manager.recentErrors";
   const BRAND_STORAGE_KEY = "local-social-ai-manager.brandBrain";
   const MEDIA_STORAGE_KEY = "local-social-ai-manager.mediaLibrary";
   const SCHEDULED_POSTS_KEY = "local-social-ai-manager.scheduledPosts";
@@ -67,9 +73,77 @@
     "platform_policy_risk",
   ]);
   const mediaRequiredPlatforms = new Set(["instagram", "youtube", "tiktok"]);
-  const supportedRoutes = ["home", "media", "generate", "drafts", "calendar", "queue", "connected", "setup", "engagement", "analytics", "brand", "settings"];
+  const supportedRoutes = ["home", "guide", "media", "generate", "drafts", "calendar", "queue", "connected", "setup", "safety", "backup", "diagnostics", "engagement", "analytics", "brand", "settings", "onboarding"];
+  const onboardingStepIds = [
+    "welcome",
+    "local_data",
+    "brand_profile",
+    "business_details",
+    "services_areas",
+    "platforms",
+    "safety",
+    "media",
+    "demo_draft",
+    "next_steps",
+  ];
+  const setupChecklistLabels = {
+    brand_profile_created: "Brand profile created",
+    local_data_ready: "Local data directory ready",
+    safety_settings_confirmed: "Safety settings confirmed",
+    media_added: "Media added",
+    first_draft_generated: "First draft generated",
+    first_draft_approved: "First draft approved",
+    first_post_scheduled: "First post scheduled",
+    manual_export_tested: "Manual export tested",
+    analytics_added: "Analytics demo or manual metrics added",
+    social_setup_reviewed: "Social accounts mock connected or setup reviewed",
+  };
+  const setupChecklistIds = Object.keys(setupChecklistLabels);
+  let onboardingDemoDraftRequested = false;
   const setupState = {
     selectedPlatformId: "facebook",
+  };
+  const safetyKillActions = {
+    pause_all_automation: {
+      label: "Pause all automation",
+      confirmationPhrase: "PAUSE ALL",
+      description: "Enable emergency pause, lock automation, and disable queue processing.",
+    },
+    cancel_future_scheduled_posts: {
+      label: "Cancel all future scheduled posts",
+      confirmationPhrase: "CANCEL FUTURE POSTS",
+      description: "Cancel unprocessed scheduled posts and queue items locally.",
+    },
+    disable_queue_processing: {
+      label: "Disable all queue processing",
+      confirmationPhrase: "DISABLE QUEUE",
+      description: "Keep queue items visible but stop local readiness processing.",
+    },
+    disconnect_accounts_locally: {
+      label: "Disconnect accounts locally",
+      confirmationPhrase: "DISCONNECT ACCOUNTS",
+      description: "Mark mock/connected account metadata disconnected locally.",
+    },
+    revoke_tokens_locally: {
+      label: "Mark tokens revoked locally",
+      confirmationPhrase: "REVOKE TOKENS",
+      description: "Mark token metadata revoked without calling providers.",
+    },
+    disable_ai_generation: {
+      label: "Disable AI generation temporarily",
+      confirmationPhrase: "DISABLE AI",
+      description: "Set a local flag for UI/service checks.",
+    },
+    export_safety_report: {
+      label: "Export safety report",
+      confirmationPhrase: "EXPORT SAFETY REPORT",
+      description: "Write a redacted local safety report.",
+    },
+    full_local_reset_placeholder: {
+      label: "Full local reset placeholder",
+      confirmationPhrase: "RESET PLACEHOLDER",
+      description: "No data is deleted. Destructive reset is not implemented.",
+    },
   };
   const mockConnectPlatformIds = ["facebook", "instagram", "youtube", "tiktok", "linkedin", "x"];
   const connectedPlatformConfigs = [
@@ -256,6 +330,101 @@
     aiProviderPreference: "mock",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+  };
+
+  const defaultOnboardingState = {
+    status: "not_started",
+    currentStep: "welcome",
+    completedSteps: [],
+    skippedSteps: [],
+    steps: onboardingStepIds.map((id, index) => ({
+      id,
+      label: id.replaceAll("_", " "),
+      status: index === 0 ? "in_progress" : "not_started",
+    })),
+    checklist: setupChecklistIds.map((id) => ({
+      id,
+      label: setupChecklistLabels[id],
+      status: "not_started",
+      optional: ["media_added", "first_draft_generated", "manual_export_tested", "analytics_added", "social_setup_reviewed"].includes(id),
+    })),
+    checklistById: {},
+    localDataDirectory: "./data",
+    localDataDirectoryExists: true,
+    localDataDirectoryWritable: true,
+    startedAt: "",
+    completedAt: "",
+    skippedAt: "",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  const defaultSafetyCenterState = {
+    emergencyPause: {
+      enabled: false,
+      enabledAt: "",
+      enabledBy: "",
+      reason: "",
+    },
+    automationLevel: "approval_queue",
+    publishingSafety: {
+      realPublishingEnabled: false,
+      futureRealPublishingEligible: false,
+      status: "disabled_by_policy",
+      message: "Real publishing remains disabled in this build.",
+    },
+    replySafety: {
+      realReplySendingEnabled: false,
+      approvalRequired: true,
+      status: "local_approval_only",
+      message: "Replies are not sent automatically.",
+    },
+    queueProcessing: {
+      byStatus: {},
+      ready: 0,
+      blocked: 0,
+      disabled: false,
+      status: "local_only",
+    },
+    connectedAccountSafety: {
+      byStatus: {},
+      connectedOrLimited: 0,
+      requiresReauth: 0,
+      tokensExposed: false,
+    },
+    criticalSafetyFlags: {
+      total: 0,
+      byFlag: {},
+      affectedDrafts: [],
+    },
+    pendingApprovals: {
+      draftsNeedingReview: 0,
+      replySuggestionsNeedingReview: 0,
+      queueItemsNeedingAttention: 0,
+    },
+    blockedActions: [
+      "scheduling_new_posts",
+      "queue_readiness_changes",
+      "mock_publishing",
+      "manual_export_packages",
+      "future_real_publishing",
+      "future_real_reply_sending",
+      "ai_auto_reply_actions",
+      "automation_above_approval_queue",
+    ],
+    allowedActions: [
+      "viewing_existing_data",
+      "editing_drafts",
+      "editing_brand_brain",
+      "importing_media",
+      "creating_backups",
+      "exporting_data_backup",
+      "reading_analytics",
+      "manual_status_notes",
+    ],
+    killSwitchActions: Object.entries(safetyKillActions).map(([id, action]) => ({ id, ...action })),
+    auditLogs: [],
+    localFlags: {},
   };
 
   const defaultBrandProfile = {
@@ -573,6 +742,613 @@
       examplePosts: profile.examplePosts,
     };
   }
+
+  function safeJson(rawValue, fallback) {
+    if (!rawValue) return fallback;
+    try {
+      const parsed = JSON.parse(rawValue);
+      return parsed == null ? fallback : parsed;
+    } catch (_error) {
+      return fallback;
+    }
+  }
+
+  function normalizeChecklistItem(item) {
+    const id = item.id || "unknown";
+    return {
+      id,
+      label: item.label || setupChecklistLabels[id] || id.replaceAll("_", " "),
+      status: ["not_started", "in_progress", "completed", "skipped", "needs_attention"].includes(item.status)
+        ? item.status
+        : "not_started",
+      optional: Boolean(item.optional),
+    };
+  }
+
+  function computedBrowserChecklist() {
+    const brand = brandBrainAdapter.loadWithoutFallback();
+    const media = mediaLibraryAdapter.load();
+    const drafts = loadBrowserArray("local-social-ai-manager.drafts");
+    const scheduled = loadScheduledPosts();
+    const queue = loadPublishQueueItems();
+    const analytics = loadBrowserArray("local-social-ai-manager.analyticsSnapshots");
+    const accounts = loadBrowserArray(CONNECTED_ACCOUNTS_KEY);
+    const onboarding = onboardingAdapter.loadLocal();
+    const completedSteps = onboarding.completedSteps || [];
+    const skippedSteps = onboarding.skippedSteps || [];
+    const statuses = {
+      brand_profile_created: brand ? "completed" : "not_started",
+      local_data_ready: "completed",
+      safety_settings_confirmed: completedSteps.includes("safety") ? "completed" : "not_started",
+      media_added: media.length ? "completed" : skippedSteps.includes("media") ? "skipped" : "not_started",
+      first_draft_generated: drafts.length ? "completed" : skippedSteps.includes("demo_draft") ? "skipped" : "not_started",
+      first_draft_approved: drafts.some((draft) => draft.approvalStatus === "approved") ? "completed" : "not_started",
+      first_post_scheduled: scheduled.length ? "completed" : "not_started",
+      manual_export_tested: queue.some((item) => item.queueStatus === "manually_exported") ? "completed" : "not_started",
+      analytics_added: analytics.length ? "completed" : "not_started",
+      social_setup_reviewed: accounts.length ? "completed" : "not_started",
+    };
+    return setupChecklistIds.map((id) => normalizeChecklistItem({
+      id,
+      label: setupChecklistLabels[id],
+      status: statuses[id],
+      optional: defaultOnboardingState.checklist.find((item) => item.id === id)?.optional,
+    }));
+  }
+
+  function loadBrowserArray(key) {
+    const parsed = safeJson(window.localStorage.getItem(key), []);
+    return Array.isArray(parsed) ? parsed : [];
+  }
+
+  const onboardingAdapter = {
+    loadLocal() {
+      const rawState = window.localStorage.getItem(ONBOARDING_STORAGE_KEY);
+      const state = rawState ? safeJson(rawState, defaultOnboardingState) : defaultOnboardingState;
+      const checklist = loadSetupChecklist();
+      return {
+        ...defaultOnboardingState,
+        ...state,
+        checklist,
+        checklistById: Object.fromEntries(checklist.map((item) => [item.id, item])),
+      };
+    },
+
+    saveLocal(state) {
+      const checklist = Array.isArray(state.checklist)
+        ? state.checklist.map(normalizeChecklistItem)
+        : computedBrowserChecklist();
+      const nextState = {
+        ...defaultOnboardingState,
+        ...state,
+        checklist,
+        checklistById: Object.fromEntries(checklist.map((item) => [item.id, item])),
+        updatedAt: new Date().toISOString(),
+      };
+      window.localStorage.setItem(ONBOARDING_STORAGE_KEY, JSON.stringify(nextState));
+      window.localStorage.setItem(SETUP_CHECKLIST_KEY, JSON.stringify(checklist));
+      return nextState;
+    },
+
+    async complete(payload) {
+      const bridge = activeApiBridge();
+      if (bridge) {
+        const state = await bridge.request("/api/onboarding/complete", {
+          method: "POST",
+          body: payload,
+        });
+        await bridge.sync();
+        return state;
+      }
+      return this.saveLocal({
+        ...this.loadLocal(),
+        status: "completed",
+        currentStep: "next_steps",
+        completedSteps: onboardingStepIds,
+        skippedSteps: payload.skippedSteps || [],
+        completedAt: new Date().toISOString(),
+      });
+    },
+
+    async skip(reason) {
+      const bridge = activeApiBridge();
+      if (bridge) {
+        const state = await bridge.request("/api/onboarding/skip", {
+          method: "POST",
+          body: { reason },
+        });
+        await bridge.sync();
+        return state;
+      }
+      return this.saveLocal({
+        ...this.loadLocal(),
+        status: "skipped",
+        currentStep: "next_steps",
+        skippedAt: new Date().toISOString(),
+      });
+    },
+
+    async restart() {
+      const bridge = activeApiBridge();
+      if (bridge) {
+        const state = await bridge.request("/api/onboarding/restart", {
+          method: "POST",
+          body: {},
+        });
+        await bridge.sync();
+        return state;
+      }
+      return this.saveLocal({
+        ...defaultOnboardingState,
+        status: "in_progress",
+        startedAt: new Date().toISOString(),
+      });
+    },
+  };
+
+  function loadSetupChecklist() {
+    const hydrated = safeJson(window.localStorage.getItem(SETUP_CHECKLIST_KEY), null);
+    if (Array.isArray(hydrated) && hydrated.length) {
+      return hydrated.map(normalizeChecklistItem);
+    }
+    return defaultOnboardingState.checklist.map(normalizeChecklistItem);
+  }
+
+  function auditEntry(action, details = {}, actorType = "user") {
+    return {
+      id: `safety-audit-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      action,
+      actorType,
+      details,
+      createdAt: new Date().toISOString(),
+    };
+  }
+
+  function loadSafetyAuditLogs() {
+    const parsed = safeJson(window.localStorage.getItem("local-social-ai-manager.safetyAuditLogs"), []);
+    return Array.isArray(parsed) ? parsed : [];
+  }
+
+  function saveSafetyAuditLogs(logs) {
+    window.localStorage.setItem("local-social-ai-manager.safetyAuditLogs", JSON.stringify(logs.slice(0, 100)));
+    return logs;
+  }
+
+  function appendSafetyAudit(action, details = {}, actorType = "user") {
+    const logs = [auditEntry(action, details, actorType), ...loadSafetyAuditLogs()];
+    saveSafetyAuditLogs(logs);
+    return logs[0];
+  }
+
+  function countBy(items, field) {
+    return items.reduce((counts, item) => {
+      const value = item[field] || "unknown";
+      counts[value] = (counts[value] || 0) + 1;
+      return counts;
+    }, {});
+  }
+
+  function computeSafetyState() {
+    const settings = settingsAdapter.load();
+    const drafts = loadBrowserArray("local-social-ai-manager.drafts");
+    const queue = loadPublishQueueItems();
+    const accounts = loadBrowserArray(CONNECTED_ACCOUNTS_KEY);
+    const suggestions = loadBrowserArray("local-social-ai-manager.replySuggestions");
+    const localState = safeJson(window.localStorage.getItem(SAFETY_CENTER_STORAGE_KEY), {});
+    const auditLogs = Array.isArray(localState.auditLogs) && localState.auditLogs.length
+      ? localState.auditLogs
+      : loadSafetyAuditLogs();
+    const enabledLog = auditLogs.find((entry) => entry.action === "emergency_pause_enabled") || {};
+    const criticalFlags = {};
+    const affectedDrafts = [];
+    drafts.forEach((draft) => {
+      const flags = Array.isArray(draft.safetyFlags) ? draft.safetyFlags : [];
+      const critical = flags.filter((flag) => criticalQueueFlags.has(flag));
+      if (!critical.length) return;
+      critical.forEach((flag) => {
+        criticalFlags[flag] = (criticalFlags[flag] || 0) + 1;
+      });
+      affectedDrafts.push({
+        draftId: draft.id,
+        platform: draft.platform,
+        title: draft.headline || draft.hook || "Draft",
+        flags: critical,
+      });
+    });
+    const localFlags = localState.localFlags || {};
+    return {
+      ...defaultSafetyCenterState,
+      ...localState,
+      emergencyPause: {
+        enabled: Boolean(settings.emergencyPauseEnabled),
+        enabledAt: settings.emergencyPauseEnabled ? enabledLog.createdAt || "" : "",
+        enabledBy: settings.emergencyPauseEnabled ? enabledLog.actorType || "" : "",
+        reason: settings.emergencyPauseEnabled ? enabledLog.details?.reason || "" : "",
+      },
+      automationLevel: settings.automationLevel,
+      queueProcessing: {
+        byStatus: countBy(queue, "queueStatus"),
+        ready: queue.filter((item) => item.queueStatus === "ready").length,
+        blocked: queue.filter((item) => item.queueStatus === "blocked").length,
+        disabled: Boolean(localFlags.queueProcessingDisabled),
+        status: settings.emergencyPauseEnabled ? "paused" : "local_only",
+      },
+      connectedAccountSafety: {
+        byStatus: countBy(accounts, "connectionStatus"),
+        connectedOrLimited: accounts.filter((account) => ["connected", "limited"].includes(account.connectionStatus)).length,
+        requiresReauth: accounts.filter((account) => ["expired", "requires_reauth"].includes(account.connectionStatus)).length,
+        tokensExposed: false,
+      },
+      criticalSafetyFlags: {
+        total: Object.values(criticalFlags).reduce((total, count) => total + count, 0),
+        byFlag: criticalFlags,
+        affectedDrafts,
+      },
+      pendingApprovals: {
+        draftsNeedingReview: drafts.filter((draft) => ["needs_review", "revision_requested"].includes(draft.approvalStatus)).length,
+        replySuggestionsNeedingReview: suggestions.filter((suggestion) => ["generated", "edited"].includes(suggestion.status)).length,
+        queueItemsNeedingAttention: queue.filter((item) => ["waiting", "blocked"].includes(item.queueStatus)).length,
+      },
+      auditLogs,
+      localFlags,
+    };
+  }
+
+  const safetyCenterAdapter = {
+    loadLocal() {
+      const state = computeSafetyState();
+      window.localStorage.setItem(SAFETY_CENTER_STORAGE_KEY, JSON.stringify(state));
+      return state;
+    },
+
+    async refresh() {
+      const bridge = activeApiBridge();
+      if (bridge) {
+        const state = await bridge.request("/api/safety-center");
+        window.localStorage.setItem(SAFETY_CENTER_STORAGE_KEY, JSON.stringify(state));
+        return state;
+      }
+      return this.loadLocal();
+    },
+
+    async setEmergencyPause(enabled, reason) {
+      const bridge = activeApiBridge();
+      if (bridge) {
+        const state = await bridge.request("/api/safety-center/emergency-pause", {
+          method: "POST",
+          body: { enabled, reason, actor_type: "user" },
+        });
+        await bridge.sync();
+        return state;
+      }
+      const settings = settingsAdapter.load();
+      settingsAdapter.saveLocal({
+        ...settings,
+        emergencyPauseEnabled: Boolean(enabled),
+        automationLevel: "approval_queue",
+      });
+      appendSafetyAudit(
+        enabled ? "emergency_pause_enabled" : "emergency_pause_disabled",
+        { reason: reason || "", previousEmergencyPauseEnabled: settings.emergencyPauseEnabled, newEmergencyPauseEnabled: Boolean(enabled) },
+      );
+      return this.loadLocal();
+    },
+
+    async setAutomationLevel(level) {
+      if (!["manual_assist", "approval_queue"].includes(level)) {
+        throw new Error("Automation levels above approval_queue are planned/locked in the MVP.");
+      }
+      const bridge = activeApiBridge();
+      if (bridge) {
+        const state = await bridge.request("/api/safety-center/automation-level", {
+          method: "POST",
+          body: { automationLevel: level, actor_type: "user" },
+        });
+        await bridge.sync();
+        return state;
+      }
+      const settings = settingsAdapter.load();
+      settingsAdapter.saveLocal({ ...settings, automationLevel: level });
+      appendSafetyAudit("automation_level_changed", {
+        previousAutomationLevel: settings.automationLevel,
+        newAutomationLevel: level,
+      });
+      return this.loadLocal();
+    },
+
+    async runKillSwitchAction(actionId, confirmationPhrase) {
+      const action = safetyKillActions[actionId];
+      if (!action) {
+        throw new Error("Unsupported kill switch action.");
+      }
+      if (confirmationPhrase !== action.confirmationPhrase) {
+        throw new Error(`Type ${action.confirmationPhrase} to confirm this action.`);
+      }
+      const bridge = activeApiBridge();
+      if (bridge) {
+        const state = await bridge.request(`/api/safety-center/kill-switch/${encodeURIComponent(actionId)}`, {
+          method: "POST",
+          body: { confirmationPhrase, actor_type: "user" },
+        });
+        await bridge.sync();
+        return state;
+      }
+      appendSafetyAudit("kill_switch_action_started", { action: actionId, label: action.label });
+      const settings = settingsAdapter.load();
+      if (actionId === "pause_all_automation") {
+        settingsAdapter.saveLocal({ ...settings, emergencyPauseEnabled: true, automationLevel: "approval_queue" });
+        const local = computeSafetyState();
+        local.localFlags = { ...local.localFlags, queueProcessingDisabled: true, updatedAt: new Date().toISOString() };
+        window.localStorage.setItem(SAFETY_CENTER_STORAGE_KEY, JSON.stringify(local));
+        appendSafetyAudit("queue_processing_disabled", { localOnly: true });
+      }
+      if (actionId === "cancel_future_scheduled_posts") {
+        const now = new Date().toISOString();
+        saveScheduledPosts(loadScheduledPosts().map((post) =>
+          ["scheduled", "queued", "missed", "failed", "needs_attention"].includes(post.status)
+            ? { ...post, status: "canceled", canceledAt: post.canceledAt || now, updatedAt: now }
+            : post
+        ));
+        savePublishQueueItems(loadPublishQueueItems().map((item) =>
+          ["waiting", "ready", "blocked", "failed"].includes(item.queueStatus)
+            ? { ...item, queueStatus: "canceled", updatedAt: now }
+            : item
+        ));
+        appendSafetyAudit("scheduled_posts_canceled", { localOnly: true });
+      }
+      if (actionId === "disable_queue_processing") {
+        const local = computeSafetyState();
+        local.localFlags = { ...local.localFlags, queueProcessingDisabled: true, updatedAt: new Date().toISOString() };
+        window.localStorage.setItem(SAFETY_CENTER_STORAGE_KEY, JSON.stringify(local));
+        appendSafetyAudit("queue_processing_disabled", { localOnly: true });
+      }
+      if (actionId === "disconnect_accounts_locally") {
+        const accounts = loadBrowserArray(CONNECTED_ACCOUNTS_KEY).map((account) => ({
+          ...account,
+          connectionStatus: "disconnected",
+          disconnectedAt: new Date().toISOString(),
+        }));
+        window.localStorage.setItem(CONNECTED_ACCOUNTS_KEY, JSON.stringify(accounts));
+        appendSafetyAudit("accounts_disconnected", { localOnly: true, count: accounts.length });
+      }
+      if (actionId === "revoke_tokens_locally") {
+        appendSafetyAudit("tokens_marked_revoked", { localOnly: true, rawTokensStored: false });
+      }
+      if (actionId === "disable_ai_generation") {
+        const local = computeSafetyState();
+        local.localFlags = { ...local.localFlags, aiGenerationDisabled: true, updatedAt: new Date().toISOString() };
+        window.localStorage.setItem(SAFETY_CENTER_STORAGE_KEY, JSON.stringify(local));
+        appendSafetyAudit("ai_generation_disabled", { localOnly: true });
+      }
+      if (actionId === "export_safety_report") {
+        appendSafetyAudit("safety_report_exported", { browserFallback: true, secretsIncluded: false });
+      }
+      appendSafetyAudit("kill_switch_action_completed", { action: actionId, label: action.label });
+      return this.loadLocal();
+    },
+  };
+
+  const backupDataAdapter = {
+    loadLocal() {
+      return loadBrowserArray(BACKUP_STORAGE_KEY);
+    },
+
+    saveLocal(items) {
+      const normalized = Array.isArray(items) ? items : [];
+      window.localStorage.setItem(BACKUP_STORAGE_KEY, JSON.stringify(normalized));
+      return normalized;
+    },
+
+    async refresh() {
+      const bridge = activeApiBridge();
+      if (bridge) {
+        const history = await bridge.request("/api/backups");
+        this.saveLocal(history);
+        return history;
+      }
+      return this.loadLocal();
+    },
+
+    async createBackup(options) {
+      const bridge = activeApiBridge();
+      if (bridge) {
+        const result = await bridge.request("/api/backups", {
+          method: "POST",
+          body: options,
+        });
+        await bridge.sync();
+        const history = await this.refresh();
+        return { result, history };
+      }
+      const now = new Date().toISOString();
+      const result = {
+        backupId: `browser-backup-${Date.now()}`,
+        createdAt: now,
+        backupType: options.backupType || "full_local_backup",
+        backupPath: `browser-demo-only/${options.backupType || "full_local_backup"}`,
+        includeMedia: Boolean(options.includeMedia),
+        includeSensitiveTokens: false,
+        includeTokenMetadata: Boolean(options.includeTokenMetadata),
+        tableCounts: {
+          generated_posts: loadBrowserArray("local-social-ai-manager.drafts").length,
+          media_assets: loadBrowserArray(MEDIA_STORAGE_KEY).length,
+          scheduled_posts: loadScheduledPosts().length,
+          publish_queue_items: loadPublishQueueItems().length,
+        },
+        fileCounts: {
+          jsonFiles: 0,
+          csvFiles: 0,
+          markdownFiles: 0,
+          mediaCopied: 0,
+          mediaMissing: 0,
+          databaseFiles: 0,
+        },
+        warnings: [
+          "Browser-only mode cannot write backup files. Use the localhost SQLite bridge to create real local backups.",
+          "Raw tokens are excluded.",
+        ],
+        restoreNotes: ["Use the local server for restore preview and future restore actions."],
+        files: [],
+        localOnly: true,
+      };
+      const history = [result, ...this.loadLocal()].slice(0, 50);
+      this.saveLocal(history);
+      return { result, history };
+    },
+
+    async previewRestore(backupPath) {
+      const bridge = activeApiBridge();
+      if (bridge) {
+        return bridge.request("/api/backups/restore-preview", {
+          method: "POST",
+          body: { backupPath },
+        });
+      }
+      return {
+        status: "preview_unavailable",
+        backupPath,
+        backupType: "unknown",
+        willRestoreTokens: false,
+        requiresConfirmation: true,
+        destructiveRestoreImplemented: false,
+        warnings: [
+          "Restore preview requires the localhost SQLite bridge.",
+          "Raw tokens are not restored by default.",
+        ],
+        restorePlan: [
+          "Start the local server.",
+          "Paste the backup folder path again.",
+          "Review the restore plan before overwriting local data.",
+        ],
+      };
+    },
+  };
+
+  const diagnosticsAdapter = {
+    loadLocal() {
+      const cached = safeJson(window.localStorage.getItem(DIAGNOSTICS_STORAGE_KEY), null);
+      return cached || this.computeBrowserFallback();
+    },
+
+    saveLocal(diagnostics) {
+      window.localStorage.setItem(DIAGNOSTICS_STORAGE_KEY, JSON.stringify(diagnostics));
+      return diagnostics;
+    },
+
+    recentErrors() {
+      return loadBrowserArray(RECENT_ERRORS_STORAGE_KEY);
+    },
+
+    async refresh() {
+      const bridge = activeApiBridge();
+      if (bridge) {
+        const diagnostics = await bridge.request("/api/diagnostics");
+        this.saveLocal(diagnostics);
+        return diagnostics;
+      }
+      const diagnostics = this.computeBrowserFallback();
+      this.saveLocal(diagnostics);
+      return diagnostics;
+    },
+
+    async exportReport() {
+      const bridge = activeApiBridge();
+      if (bridge) {
+        const result = await bridge.request("/api/diagnostics/export", {
+          method: "POST",
+          body: { recentErrors: this.recentErrors() },
+        });
+        await bridge.sync();
+        return result;
+      }
+      const diagnostics = this.computeBrowserFallback();
+      const result = {
+        reportPath: "browser-demo-only/diagnostic-report.md",
+        createdAt: diagnostics.checkedAt,
+        overallStatus: diagnostics.overallStatus,
+        redactionNotice: "Browser-only mode cannot write files. Start the localhost bridge to export a real report.",
+      };
+      this.saveLocal(diagnostics);
+      return result;
+    },
+
+    computeBrowserFallback() {
+      const checkedAt = new Date().toISOString();
+      const settings = settingsAdapter.load();
+      const safety = safetyCenterAdapter.loadLocal();
+      const drafts = loadBrowserArray("local-social-ai-manager.drafts");
+      const queue = loadPublishQueueItems();
+      const engagement = loadBrowserArray("local-social-ai-manager.engagementItems");
+      const analytics = loadBrowserArray("local-social-ai-manager.analyticsSnapshots");
+      const accounts = loadBrowserArray(CONNECTED_ACCOUNTS_KEY);
+      const backups = backupDataAdapter.loadLocal();
+      const checklist = computedBrowserChecklist();
+      const recentErrors = this.recentErrors();
+      const sections = [
+        diagnosticsSection("local_storage", "Local storage", [
+          diagnosticResult("app_environment", "App environment", "healthy", settings.appEnvironment || "development", "Browser fallback only.", "Start the localhost SQLite bridge for filesystem checks.", checkedAt),
+          diagnosticResult("local_data_directory_exists", "Local data directory exists", "unknown", settings.localDataDirectory || "./data", "Browser mode cannot check filesystem paths.", "Start the localhost SQLite bridge for full diagnostics.", checkedAt),
+          diagnosticResult("local_data_directory_writable", "Local data directory writable", "unknown", "Writability cannot be checked from static browser mode.", "No filesystem write is attempted in browser fallback.", "Start the localhost SQLite bridge for a real write check.", checkedAt),
+          diagnosticResult("media_directory_exists", "Media directory exists", "unknown", "Browser mode cannot inspect the media directory.", "No local filesystem API is available here.", "Start the localhost SQLite bridge for full diagnostics.", checkedAt),
+          diagnosticResult("export_directory_exists", "Export directory exists", "unknown", "Browser mode cannot inspect the export directory.", "No local filesystem API is available here.", "Start the localhost SQLite bridge for full diagnostics.", checkedAt),
+          diagnosticResult("logs_directory_exists", "Logs directory exists", "unknown", "Browser mode cannot inspect the logs directory.", "No local filesystem API is available here.", "Start the localhost SQLite bridge for full diagnostics.", checkedAt),
+          diagnosticResult("backup_directory_exists", "Backup directory exists", "unknown", "Browser mode cannot inspect the backup directory.", "No local filesystem API is available here.", "Start the localhost SQLite bridge for full diagnostics.", checkedAt),
+        ]),
+        diagnosticsSection("database", "Database", [
+          diagnosticResult("sqlite_database_reachable", "SQLite database reachable", activeApiBridge() ? "healthy" : "warning", activeApiBridge() ? "SQLite bridge is available." : "SQLite bridge is not active.", "Static browser mode uses localStorage demo data.", "Run the local API server for real database checks.", checkedAt),
+          diagnosticResult("database_migrations_status", "Database migrations status", "unknown", "Migration status is unavailable in browser fallback.", "No database query was run.", "Run the local API server for migration checks.", checkedAt),
+        ]),
+        diagnosticsSection("ai", "AI", [
+          diagnosticResult("ai_provider_status", "AI provider status", settings.aiProviderPreference === "mock" ? "healthy" : "warning", `AI provider preference is ${settings.aiProviderPreference}.`, "Mock mode is the safe local default.", "Keep mock selected unless intentionally configuring real providers later.", checkedAt),
+          diagnosticResult("mock_ai_provider_available", "Mock AI provider available", "healthy", "Mock AI is available in the local demo.", "No API key is required.", "No action needed.", checkedAt),
+        ]),
+        diagnosticsSection("social_integrations", "Social integrations", [
+          diagnosticResult("integration_mode", "Integration mode", "healthy", "Mock/scaffold integration mode.", "Browser fallback does not read environment variables.", "Open Social Integration Setup for configuration guidance.", checkedAt),
+          diagnosticResult("real_publishing_disabled", "Real publishing disabled", "healthy", "Real publishing is disabled.", "Manual export remains the safe path.", "No action needed.", checkedAt),
+          diagnosticResult("connected_account_summary", "Connected account summary", "healthy", `${accounts.length} connected account record(s) in browser cache.`, "Token fields are not displayed.", "Use Connected Accounts to review mock connections.", checkedAt),
+          diagnosticResult("token_storage_mode", "Token storage mode", "healthy", "placeholder_not_stored", "Browser UI never stores raw OAuth tokens.", "Use secure storage before real OAuth later.", checkedAt),
+          diagnosticResult("secret_exposure_safety", "Secret exposure safety check", "healthy", "Diagnostics redacts known token and secret patterns.", "No token blobs are displayed.", "Do not paste secrets into troubleshooting messages.", checkedAt),
+        ]),
+        diagnosticsSection("safety", "Safety", [
+          diagnosticResult("emergency_pause_status", "Emergency pause status", safety.emergencyPause?.enabled ? "warning" : "healthy", safety.emergencyPause?.enabled ? "Emergency pause is on." : "Emergency pause is off.", "Pause blocks automation and queue readiness.", "Use Safety Center to change pause state.", checkedAt),
+          diagnosticResult("automation_level_status", "Automation level", safety.automationLevel === "approval_queue" ? "healthy" : "warning", `Automation level is ${safety.automationLevel}.`, "Higher levels are planned/locked.", "Keep approval_queue for MVP safety.", checkedAt),
+        ]),
+        diagnosticsSection("queue_jobs", "Queue and jobs", [
+          diagnosticResult("job_runner_status", "Job runner status", "unknown", "No local job runner execution can be checked in browser mode.", "The runner is server-side/local Python.", "Run the local job runner from the documented command.", checkedAt),
+          diagnosticResult("queue_blocked_count", "Queue blocked count", queue.some((item) => item.queueStatus === "blocked") ? "warning" : "healthy", `${queue.filter((item) => item.queueStatus === "blocked").length} queue item(s) are blocked.`, "Blocked items stay local.", "Open Publish Queue to review blockers.", checkedAt),
+        ]),
+        diagnosticsSection("content_workflow", "Content workflow", [
+          diagnosticResult("drafts_needing_review_count", "Drafts needing review", drafts.some((draft) => ["needs_review", "revision_requested"].includes(draft.approvalStatus)) ? "warning" : "healthy", `${drafts.filter((draft) => ["needs_review", "revision_requested"].includes(draft.approvalStatus)).length} draft(s) need review.`, "Human approval is required.", "Open Drafts to review local content.", checkedAt),
+          diagnosticResult("engagement_needing_reply_count", "Engagement needing reply", engagement.some((item) => ["new", "needs_reply", "reply_suggested"].includes(item.status) && item.requiresResponse) ? "warning" : "healthy", `${engagement.filter((item) => ["new", "needs_reply", "reply_suggested"].includes(item.status) && item.requiresResponse).length} engagement item(s) need reply.`, "Replies are local-only until future explicit platform work.", "Open Engagement Inbox.", checkedAt),
+          diagnosticResult("analytics_data_availability", "Analytics data availability", analytics.length ? "healthy" : "warning", `${analytics.length} analytics snapshot(s) are cached.`, "Manual data is manual; mock data is fake/demo.", "Add manual metrics or generate mock analytics.", checkedAt),
+          diagnosticResult("setup_checklist_status", "Setup checklist status", checklist.every((item) => item.status === "completed" || item.optional) ? "healthy" : "warning", `${checklist.filter((item) => item.status === "completed").length} of ${checklist.length} checklist item(s) complete.`, "The checklist guides first setup.", "Open Home or Onboarding to continue setup.", checkedAt),
+        ]),
+        diagnosticsSection("backups", "Backups", [
+          diagnosticResult("backup_availability", "Backup availability", backups.length ? "healthy" : "warning", `${backups.length} backup(s) are cached.`, "Browser mode cannot create real backup files.", "Use Backup & Data through the localhost bridge to create real backups.", checkedAt),
+        ]),
+        diagnosticsSection("recent_errors", "Recent errors", [
+          diagnosticResult("recent_safe_errors", "Recent safe errors", recentErrors.length ? "warning" : "healthy", `${recentErrors.length} recent safe error(s) recorded.`, recentErrors.slice(0, 3).map(redactDiagnosticText).join(" | ") || "No recent safe errors.", "Copy or export diagnostics when asking for help.", checkedAt),
+        ]),
+      ];
+      const results = sections.flatMap((section) => section.results);
+      const summary = diagnosticStatusSummary(results);
+      return {
+        checkedAt,
+        overallStatus: summary.error ? "error" : summary.warning ? "warning" : summary.unknown ? "unknown" : "healthy",
+        summary,
+        sections,
+        results,
+        nextSteps: results
+          .filter((result) => ["error", "warning", "unknown"].includes(result.status))
+          .map((result) => result.recommendedAction)
+          .filter((value, index, list) => value && list.indexOf(value) === index)
+          .slice(0, 8),
+        recentErrors,
+        localOnly: true,
+        redactionNotice: "Diagnostics redacts tokens, secrets, authorization codes, and raw provider credentials.",
+      };
+    },
+  };
 
   const settingsAdapter = {
     load() {
@@ -1233,6 +2009,1159 @@
 
   function formatStatus(status) {
     return status.replaceAll("_", " ");
+  }
+
+  function diagnosticResult(id, label, status, summary, details, recommendedAction, checkedAt) {
+    return {
+      id,
+      label,
+      status,
+      summary: redactDiagnosticText(summary),
+      details: redactDiagnosticText(details),
+      recommendedAction: redactDiagnosticText(recommendedAction),
+      checkedAt,
+    };
+  }
+
+  function diagnosticsSection(id, label, results) {
+    return { id, label, results };
+  }
+
+  function diagnosticStatusSummary(results) {
+    return ["healthy", "warning", "error", "disabled", "unknown"].reduce((summary, status) => {
+      summary[status] = results.filter((result) => result.status === status).length;
+      return summary;
+    }, {});
+  }
+
+  function diagnosticStatusClass(status) {
+    if (status === "healthy") return "safe";
+    if (status === "error") return "blocked";
+    if (status === "disabled") return "mock-mode";
+    return "needs-review";
+  }
+
+  function redactDiagnosticText(value) {
+    return String(value ?? "")
+      .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [REDACTED]")
+      .replace(/(access[_-]?token|refresh[_-]?token|client[_-]?secret|authorization[_-]?code|id[_-]?token|api[_-]?key)(\s*[:=]\s*)([^\s,;]+)/gi, "$1$2[REDACTED]")
+      .replace(/(Authorization\s*:\s*)([^\n]+)/gi, "$1[REDACTED]")
+      .replace(/(META|GOOGLE|TIKTOK|LINKEDIN|X)_CLIENT_SECRET(\s*[:=]\s*)([^\s,;]+)/gi, "$1_CLIENT_SECRET$2[REDACTED]");
+  }
+
+  function recordFriendlyError(error, context = "app") {
+    const message = redactDiagnosticText(error?.message || String(error || "Unknown local app error."));
+    const entry = {
+      id: `error-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      context,
+      message,
+      createdAt: new Date().toISOString(),
+    };
+    const errors = [entry, ...loadBrowserArray(RECENT_ERRORS_STORAGE_KEY)].slice(0, 25);
+    window.localStorage.setItem(RECENT_ERRORS_STORAGE_KEY, JSON.stringify(errors));
+    return entry;
+  }
+
+  function checklistStatusClass(status) {
+    if (status === "completed") return "safe";
+    if (status === "needs_attention") return "blocked";
+    if (status === "skipped") return "mock-mode";
+    return "needs-review";
+  }
+
+  function renderSetupChecklist() {
+    const container = getElement("home-setup-checklist");
+    if (!container) return;
+    const checklist = activeApiBridge()
+      ? loadSetupChecklist()
+      : computedBrowserChecklist();
+    window.localStorage.setItem(SETUP_CHECKLIST_KEY, JSON.stringify(checklist));
+    container.innerHTML = checklist
+      .map((item) => `
+        <article class="setup-checklist-item">
+          <span class="card-status ${checklistStatusClass(item.status)}">${escapeHtml(formatStatus(item.status))}</span>
+          <strong>${escapeHtml(item.label)}</strong>
+          <p>${escapeHtml(checklistHelpText(item))}</p>
+        </article>
+      `)
+      .join("");
+  }
+
+  function pluralize(count, singular, plural = `${singular}s`) {
+    return `${count} ${count === 1 ? singular : plural}`;
+  }
+
+  function draftTitle(draft) {
+    return draft?.headline || draft?.hook || draft?.caption?.slice(0, 54) || "Untitled draft";
+  }
+
+  function controlTaskMarkup(task) {
+    const statusClass = task.statusClass || "local-only";
+    const status = task.status || "Local Only";
+    const meta = Array.isArray(task.meta) && task.meta.length
+      ? `<div class="control-task-meta">${task.meta.map((item) => `<span class="card-status ${escapeHtml(item.className || "mock-mode")}">${escapeHtml(item.label)}</span>`).join("")}</div>`
+      : "";
+    const action = task.href
+      ? `<a class="${task.primary ? "primary-button" : "secondary-button"} link-button" href="${escapeHtml(task.href)}" aria-label="${escapeHtml(task.actionLabel || `Open ${task.title}`)}">${escapeHtml(task.actionText || "Open")}</a>`
+      : "";
+    return `
+      <article class="control-task-row${task.empty ? " control-task-empty" : ""}">
+        <div>
+          <span class="card-status ${escapeHtml(statusClass)}">${escapeHtml(status)}</span>
+          <strong>${escapeHtml(task.title)}</strong>
+          <p>${escapeHtml(task.copy || "")}</p>
+          ${meta}
+        </div>
+        ${action}
+      </article>
+    `;
+  }
+
+  function setControlTaskList(id, tasks, emptyTask) {
+    const container = getElement(id);
+    if (!container) return;
+    const rows = tasks.length ? tasks : [{ ...emptyTask, empty: true }];
+    container.innerHTML = rows.map(controlTaskMarkup).join("");
+  }
+
+  function setControlText(id, value) {
+    const element = getElement(id);
+    if (element) {
+      element.textContent = value;
+    }
+  }
+
+  function activeScheduledPost(post) {
+    return !["canceled", "completed", "failed"].includes(post.status);
+  }
+
+  function controlCenterSnapshot() {
+    const settings = settingsAdapter.load();
+    const onboarding = onboardingAdapter.loadLocal();
+    const brand = brandBrainAdapter.loadWithoutFallback();
+    const media = mediaLibraryAdapter.load();
+    const drafts = loadBrowserArray("local-social-ai-manager.drafts");
+    const scheduled = loadScheduledPosts();
+    const queue = loadPublishQueueItems();
+    const engagement = loadBrowserArray("local-social-ai-manager.engagementItems");
+    const suggestions = loadBrowserArray("local-social-ai-manager.replySuggestions");
+    const analytics = loadBrowserArray("local-social-ai-manager.analyticsSnapshots");
+    const reports = loadBrowserArray("local-social-ai-manager.weeklyReports");
+    const safety = computeSafetyState();
+    const now = new Date();
+    const weekEnd = addDays(now, 7);
+    const reviewDrafts = drafts.filter((draft) => ["needs_review", "revision_requested"].includes(draft.approvalStatus));
+    const activeScheduledDraftIds = new Set(scheduled.filter(activeScheduledPost).map((post) => post.generatedPostId));
+    const approvedUnscheduledDrafts = drafts.filter(
+      (draft) => draft.approvalStatus === "approved" && !activeScheduledDraftIds.has(draft.id),
+    );
+    const criticalDrafts = drafts.filter((draft) =>
+      (Array.isArray(draft.safetyFlags) ? draft.safetyFlags : []).some((flag) => criticalQueueFlags.has(flag)),
+    );
+    const upcomingPosts = scheduled
+      .filter((post) => activeScheduledPost(post))
+      .filter((post) => {
+        const scheduledFor = new Date(post.scheduledFor);
+        return !Number.isNaN(scheduledFor.getTime()) && scheduledFor >= now && scheduledFor <= weekEnd;
+      })
+      .sort((left, right) => new Date(left.scheduledFor) - new Date(right.scheduledFor));
+    const readyQueue = queue.filter((item) => item.queueStatus === "ready");
+    const blockedQueue = queue.filter((item) => ["blocked", "failed"].includes(item.queueStatus));
+    const waitingQueue = queue.filter((item) => item.queueStatus === "waiting");
+    const engagementNeedingReply = engagement.filter((item) =>
+      ["new", "needs_reply", "reply_suggested"].includes(item.status) && item.requiresResponse !== false,
+    );
+    const urgentEngagement = engagement.filter((item) =>
+      item.priority === "urgent" && !["archived", "spam", "replied_manually"].includes(item.status),
+    );
+    const pendingSuggestions = suggestions.filter((suggestion) => ["generated", "edited"].includes(suggestion.status));
+    const mediaReady = media.filter((asset) =>
+      ["ready_for_generation", "reviewed", "new"].includes(asset.status || asset.usageStatus),
+    );
+    const latestReport = reports
+      .slice()
+      .sort((left, right) => new Date(right.createdAt || right.weekEndDate || 0) - new Date(left.createdAt || left.weekEndDate || 0))[0];
+
+    return {
+      settings,
+      onboarding,
+      brand,
+      media,
+      drafts,
+      scheduled,
+      queue,
+      analytics,
+      reports,
+      safety,
+      reviewDrafts,
+      approvedUnscheduledDrafts,
+      criticalDrafts,
+      upcomingPosts,
+      readyQueue,
+      blockedQueue,
+      waitingQueue,
+      engagementNeedingReply,
+      urgentEngagement,
+      pendingSuggestions,
+      mediaReady,
+      latestReport,
+    };
+  }
+
+  function recommendedControlAction(snapshot) {
+    if (!["completed", "skipped"].includes(snapshot.onboarding.status)) {
+      return {
+        title: "Continue onboarding",
+        copy: "Finish the guided setup so Brand Brain, safety defaults, and local workflow basics are in place.",
+        href: "#onboarding",
+        actionText: "Continue setup",
+        status: "Setup",
+        statusClass: "needs-review",
+      };
+    }
+    if (!snapshot.brand) {
+      return {
+        title: "Finish Brand Brain",
+        copy: "Add the business identity before generating real draft ideas.",
+        href: "#brand",
+        actionText: "Open Brand Brain",
+        status: "Needs setup",
+        statusClass: "needs-review",
+      };
+    }
+    if (!snapshot.media.length) {
+      return {
+        title: "Add your first media",
+        copy: "Upload or import job photos/videos so generated content can be grounded in real work.",
+        href: "#media",
+        actionText: "Open Media Library",
+        status: "Local media",
+        statusClass: "local-only",
+      };
+    }
+    if (!snapshot.drafts.length) {
+      return {
+        title: "Generate your first draft",
+        copy: "Use mock AI generation to create draft content. Generated posts start as needs_review.",
+        href: "#generate",
+        actionText: "Generate draft",
+        status: "Mock Data",
+        statusClass: "mock-mode",
+      };
+    }
+    if (snapshot.reviewDrafts.length) {
+      return {
+        title: "Review draft approvals",
+        copy: `${pluralize(snapshot.reviewDrafts.length, "draft")} need human review before scheduling.`,
+        href: "#drafts",
+        actionText: "Review drafts",
+        status: "Approval Required",
+        statusClass: "needs-review",
+      };
+    }
+    if (snapshot.approvedUnscheduledDrafts.length) {
+      return {
+        title: "Schedule approved drafts",
+        copy: `${pluralize(snapshot.approvedUnscheduledDrafts.length, "approved draft")} can be placed on the local calendar.`,
+        href: "#drafts",
+        actionText: "Schedule drafts",
+        status: "Local Only",
+        statusClass: "local-only",
+      };
+    }
+    if (snapshot.readyQueue.length || snapshot.blockedQueue.length) {
+      return {
+        title: "Check Publish Queue",
+        copy: `${snapshot.readyQueue.length} ready and ${snapshot.blockedQueue.length} blocked queue item(s). Manual Export is the safe posting path.`,
+        href: "#queue",
+        actionText: "Open queue",
+        status: "Manual Export",
+        statusClass: "mock-mode",
+      };
+    }
+    if (snapshot.engagementNeedingReply.length) {
+      return {
+        title: "Review Engagement Inbox",
+        copy: `${pluralize(snapshot.engagementNeedingReply.length, "item")} may need a local reply decision. Replies are not sent automatically.`,
+        href: "#engagement",
+        actionText: "Open inbox",
+        status: "Local Approval",
+        statusClass: "needs-review",
+      };
+    }
+    return {
+      title: "Review analytics and plan next week",
+      copy: "Use local analytics, weekly reports, and AI memory to decide what content to create next.",
+      href: "#analytics",
+      actionText: "Open analytics",
+      status: "Local Learning",
+      statusClass: "local-only",
+    };
+  }
+
+  function renderControlCenter() {
+    const snapshot = controlCenterSnapshot();
+    const next = recommendedControlAction(snapshot);
+    const nextLink = getElement("control-next-action");
+    if (nextLink) {
+      nextLink.href = next.href;
+      nextLink.textContent = next.actionText;
+      nextLink.setAttribute("aria-label", next.actionLabel || next.actionText);
+    }
+    setControlText("control-next-heading", next.title);
+    setControlText("control-next-copy", next.copy);
+    const status = getElement("control-next-status");
+    if (status) {
+      status.className = `card-status ${next.statusClass}`;
+      status.textContent = next.status;
+    }
+
+    setControlText("control-summary-drafts", String(snapshot.reviewDrafts.length));
+    setControlText("control-summary-scheduled", String(snapshot.upcomingPosts.length));
+    setControlText("control-summary-queue", String(snapshot.readyQueue.length + snapshot.blockedQueue.length));
+    setControlText("control-summary-engagement", String(snapshot.engagementNeedingReply.length));
+
+    const needs = [];
+    if (snapshot.settings.emergencyPauseEnabled) {
+      needs.push({
+        title: "Emergency pause is enabled",
+        copy: "Scheduling, queue readiness, mock publishing, manual export packages, and future real actions are blocked.",
+        href: "#safety",
+        actionText: "Open Safety Center",
+        status: "Paused",
+        statusClass: "needs-review",
+        primary: true,
+      });
+    }
+    if (snapshot.criticalDrafts.length) {
+      needs.push({
+        title: "Critical draft safety flags",
+        copy: `${pluralize(snapshot.criticalDrafts.length, "draft")} have critical flags that block scheduling and future publishing.`,
+        href: "#drafts",
+        actionText: "Review flags",
+        status: "Blocked",
+        statusClass: "needs-review",
+      });
+    }
+    if (snapshot.reviewDrafts.length) {
+      needs.push({
+        title: "Drafts need review",
+        copy: `${snapshot.reviewDrafts.slice(0, 2).map(draftTitle).join(", ")}${snapshot.reviewDrafts.length > 2 ? ", and more" : ""}`,
+        href: "#drafts",
+        actionText: "Review",
+        status: "Approval Required",
+        statusClass: "needs-review",
+        meta: [{ label: pluralize(snapshot.reviewDrafts.length, "draft"), className: "needs-review" }],
+      });
+    }
+    if (snapshot.blockedQueue.length) {
+      needs.push({
+        title: "Publish Queue has blocked items",
+        copy: "Open blocked local queue items to see preflight errors, account warnings, or emergency pause messages.",
+        href: "#queue",
+        actionText: "Open queue",
+        status: "Blocked",
+        statusClass: "needs-review",
+        meta: [{ label: pluralize(snapshot.blockedQueue.length, "item"), className: "needs-review" }],
+      });
+    }
+    if (snapshot.urgentEngagement.length) {
+      needs.push({
+        title: "Urgent engagement needs review",
+        copy: "Review urgent mock/manual engagement locally. No replies are sent automatically.",
+        href: "#engagement",
+        actionText: "Review inbox",
+        status: "Local Approval",
+        statusClass: "needs-review",
+        meta: [{ label: pluralize(snapshot.urgentEngagement.length, "urgent item"), className: "needs-review" }],
+      });
+    }
+
+    const ready = [];
+    if (snapshot.approvedUnscheduledDrafts.length) {
+      ready.push({
+        title: "Approved drafts are ready to schedule",
+        copy: `${pluralize(snapshot.approvedUnscheduledDrafts.length, "draft")} can move to the local calendar if preflight stays safe.`,
+        href: "#drafts",
+        actionText: "Schedule",
+        status: "Local Only",
+        statusClass: "local-only",
+      });
+    }
+    if (snapshot.readyQueue.length) {
+      ready.push({
+        title: "Manual export packages are ready",
+        copy: `${pluralize(snapshot.readyQueue.length, "queue item")} can be exported manually after review. This is not automatic publishing.`,
+        href: "#queue",
+        actionText: "Manual export",
+        status: "Manual Export",
+        statusClass: "mock-mode",
+      });
+    }
+    if (snapshot.pendingSuggestions.length) {
+      ready.push({
+        title: "Reply suggestions await local approval",
+        copy: `${pluralize(snapshot.pendingSuggestions.length, "suggestion")} can be edited, approved locally, rejected, or escalated.`,
+        href: "#engagement",
+        actionText: "Review replies",
+        status: "Local Approval",
+        statusClass: "needs-review",
+      });
+    }
+    if (snapshot.mediaReady.length) {
+      ready.push({
+        title: "Media is ready for content ideas",
+        copy: `${pluralize(snapshot.mediaReady.length, "media item")} can support new mock drafts.`,
+        href: "#generate",
+        actionText: "Generate",
+        status: "Mock Data",
+        statusClass: "mock-mode",
+      });
+    }
+
+    const week = [];
+    snapshot.upcomingPosts.slice(0, 3).forEach((post) => {
+      week.push({
+        title: post.scheduleMetadata?.hook || post.scheduleMetadata?.headline || `${formatStatus(post.platform)} scheduled post`,
+        copy: `${formatDateTime(post.scheduledFor)} · ${formatStatus(post.status)} · ${post.captionSnapshot?.slice(0, 90) || "Caption snapshot saved."}`,
+        href: "#calendar",
+        actionText: "View",
+        status: post.platform || "Calendar",
+        statusClass: "local-only",
+      });
+    });
+    if (snapshot.latestReport) {
+      week.push({
+        title: "Latest weekly report is available",
+        copy: snapshot.latestReport.summary || "Review local wins, concerns, and recommendations for next week.",
+        href: "#analytics",
+        actionText: "Open report",
+        status: "Weekly Reports",
+        statusClass: "local-only",
+      });
+    }
+    if (snapshot.analytics.length) {
+      week.push({
+        title: "Analytics are ready to review",
+        copy: `${pluralize(snapshot.analytics.length, "snapshot")} stored locally. Mock and manual data remain labeled by source.`,
+        href: "#analytics",
+        actionText: "Review",
+        status: "Local Learning",
+        statusClass: "local-only",
+      });
+    }
+    if (snapshot.waitingQueue.length && !snapshot.upcomingPosts.length) {
+      week.push({
+        title: "Queue has waiting local items",
+        copy: `${pluralize(snapshot.waitingQueue.length, "item")} are waiting for due time or preflight. Local jobs never publish externally.`,
+        href: "#queue",
+        actionText: "Open queue",
+        status: "Local Only",
+        statusClass: "local-only",
+      });
+    }
+
+    const safetyRows = [
+      {
+        title: snapshot.settings.emergencyPauseEnabled ? "Emergency pause is on" : "Emergency pause is off",
+        copy: snapshot.settings.emergencyPauseEnabled
+          ? "Automation and queue readiness are paused until you disable it in Safety Center."
+          : "Safe local actions can continue. Use Safety Center if anything feels off.",
+        href: "#safety",
+        actionText: "Safety Center",
+        status: snapshot.settings.emergencyPauseEnabled ? "Paused" : "Ready",
+        statusClass: snapshot.settings.emergencyPauseEnabled ? "needs-review" : "safe",
+      },
+      {
+        title: "Real publishing is disabled",
+        copy: "Publish Queue supports Manual Export and mock/demo actions only. No real social APIs are called.",
+        href: "#queue",
+        actionText: "Publish Queue",
+        status: "Disabled",
+        statusClass: "needs-review",
+      },
+      {
+        title: "Replies are not sent automatically",
+        copy: "AI can suggest replies, but approval is local only and does not send to platforms.",
+        href: "#engagement",
+        actionText: "Engagement",
+        status: "Approval Required",
+        statusClass: "needs-review",
+      },
+    ];
+
+    setControlTaskList("control-needs-list", needs, {
+      title: "Nothing urgent right now",
+      copy: "No blocked queue items, critical draft flags, urgent engagement, or emergency pause are active.",
+      status: "All clear",
+      statusClass: "safe",
+      href: "#diagnostics",
+      actionText: "Diagnostics",
+    });
+    setControlTaskList("control-ready-list", ready, {
+      title: "No ready local tasks yet",
+      copy: "Generate drafts, approve them, schedule them, or run mock engagement to create your next workflow item.",
+      status: "Next step",
+      statusClass: "mock-mode",
+      href: "#generate",
+      actionText: "Generate",
+    });
+    setControlTaskList("control-week-list", week, {
+      title: "No weekly items yet",
+      copy: "Schedule an approved draft or add analytics to populate this week view.",
+      status: "Local Only",
+      statusClass: "local-only",
+      href: "#calendar",
+      actionText: "Calendar",
+    });
+    setControlTaskList("control-safety-list", safetyRows, {
+      title: "Safety status unavailable",
+      copy: "Open Safety Center or Diagnostics to refresh local safety checks.",
+      status: "Needs check",
+      statusClass: "needs-review",
+      href: "#safety",
+      actionText: "Open",
+    });
+    renderSetupChecklist();
+  }
+
+  function checklistHelpText(item) {
+    const copy = {
+      brand_profile_created: "Add the first Brand Brain profile before generating real drafts.",
+      local_data_ready: "Use a stable local folder, not a temporary download or cache folder.",
+      safety_settings_confirmed: "Approval stays required and real publishing remains disabled.",
+      media_added: "Upload or import at least one real photo or video when ready.",
+      first_draft_generated: "Generate a mock draft and save it as needs_review.",
+      first_draft_approved: "Approve a reviewed draft before scheduling.",
+      first_post_scheduled: "Put an approved draft on the local calendar.",
+      manual_export_tested: "Create or record a manual export before relying on the queue.",
+      analytics_added: "Add manual metrics or generate demo analytics.",
+      social_setup_reviewed: "Mock-connect or review setup. Real accounts are optional.",
+    };
+    return copy[item.id] || "Complete this setup step when ready.";
+  }
+
+  function setOnboardingMessage(kind, text) {
+    const error = getElement("onboarding-error");
+    const success = getElement("onboarding-success");
+    if (!error || !success) return;
+    error.hidden = kind !== "error";
+    success.hidden = kind !== "success";
+    error.textContent = kind === "error" ? text : "";
+    success.textContent = kind === "success" ? text : "";
+  }
+
+  function renderOnboarding() {
+    const view = getElement("onboarding-view");
+    if (!view) return;
+    const state = onboardingAdapter.loadLocal();
+    const settings = settingsAdapter.load();
+    getElement("onboarding-local-data-directory").textContent = state.localDataDirectory || settings.localDataDirectory;
+    getElement("onboarding-local-data-exists").textContent = state.localDataDirectoryExists ? "Yes" : "Not yet";
+    getElement("onboarding-local-data-writable").textContent = state.localDataDirectoryWritable ? "Yes" : "Needs attention";
+
+    const progress = getElement("onboarding-progress");
+    if (progress) {
+      progress.innerHTML = (state.steps || defaultOnboardingState.steps)
+        .map((step) => `<li data-status="${escapeHtml(step.status)}">${escapeHtml(step.label || formatStatus(step.id))}</li>`)
+        .join("");
+    }
+  }
+
+  function collectOnboardingBrandProfile() {
+    const cta = getElement("onboarding-commonCTA").value.trim();
+    return {
+      businessName: getElement("onboarding-businessName").value.trim(),
+      industry: getElement("onboarding-industry").value.trim(),
+      description: getElement("onboarding-description").value.trim(),
+      services: listFromValue(getElement("onboarding-services").value),
+      serviceAreas: listFromValue(getElement("onboarding-serviceAreas").value),
+      brandVoice: getElement("onboarding-brandVoice").value.trim(),
+      commonCTAs: cta ? [cta] : [],
+      website: getElement("onboarding-website").value.trim(),
+      phone: getElement("onboarding-phone").value.trim(),
+      email: getElement("onboarding-email").value.trim(),
+      approvalRules: ["Owner approves every generated draft before scheduling."],
+      safetyRules: [
+        "Never invent testimonials.",
+        "Never invent prices, guarantees, or availability.",
+      ],
+    };
+  }
+
+  function listFromValue(value) {
+    return String(value || "")
+      .split("\n")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  function collectOnboardingPlatforms() {
+    return Array.from(document.querySelectorAll('input[name="onboarding-platforms"]:checked'))
+      .map((input) => input.value)
+      .filter((value) => platformIds.includes(value));
+  }
+
+  function validateOnboardingPayload(payload) {
+    if (!payload.brandProfile.businessName) {
+      return "Add a business name before completing onboarding.";
+    }
+    if (!payload.brandProfile.services.length) {
+      return "Add at least one service before completing onboarding.";
+    }
+    if (!payload.brandProfile.serviceAreas.length) {
+      return "Add at least one service area before completing onboarding.";
+    }
+    if (!payload.settings.defaultPlatformTargets.length) {
+      return "Choose at least one default platform.";
+    }
+    if (payload.brandProfile.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(payload.brandProfile.email)) {
+      return "Enter a valid public business email address or leave email blank.";
+    }
+    return "";
+  }
+
+  async function createOnboardingDemoDraft() {
+    const bridge = activeApiBridge();
+    const platforms = collectOnboardingPlatforms();
+    const platform = platforms[0] || "facebook";
+    if (bridge) {
+      await bridge.sync();
+      const brand = brandBrainAdapter.load();
+      const bundle = await bridge.request("/api/content-generation", {
+        method: "POST",
+        body: {
+          input: {
+            brandProfileId: brand.id,
+            contentGoal: "build_trust",
+            contentAngle: "educational",
+            selectedPlatforms: [platform],
+            selectedMediaIds: [],
+            userInstructions: "Create a clearly labeled first onboarding demo draft.",
+          },
+        },
+      });
+      await bridge.request("/api/drafts/save-generated", {
+        method: "POST",
+        body: {
+          bundle,
+          selected_platforms: [platform],
+          save_request_id: `onboarding-demo-${Date.now()}`,
+        },
+      });
+      await bridge.sync();
+      return;
+    }
+
+    const brand = brandBrainAdapter.load();
+    const now = new Date().toISOString();
+    const draft = {
+      id: `onboarding-demo-draft-${Date.now()}`,
+      brandProfileId: brand.id,
+      platform,
+      headline: "First local demo draft",
+      hook: `${brand.businessName || "Your business"}: a simple setup post.`,
+      caption: `Mock onboarding draft for ${brand.businessName || "your business"}. Use this only as a starting point and review before scheduling.`,
+      hashtags: ["#LocalBusiness", "#DemoDraft"],
+      mediaAssetIds: [],
+      approvalStatus: "needs_review",
+      generationProvider: "mock",
+      safetyFlags: [],
+      createdAt: now,
+      updatedAt: now,
+      saveRequestId: `onboarding-demo-${now}`,
+    };
+    const drafts = loadBrowserArray("local-social-ai-manager.drafts");
+    window.localStorage.setItem("local-social-ai-manager.drafts", JSON.stringify(drafts.concat(draft)));
+  }
+
+  async function completeOnboarding() {
+    const payload = {
+      brandProfile: collectOnboardingBrandProfile(),
+      settings: {
+        localDataDirectory: settingsAdapter.load().localDataDirectory,
+        defaultPlatformTargets: collectOnboardingPlatforms(),
+        requireApprovalBeforePublishing: true,
+        requireApprovalBeforeReplying: true,
+        emergencyPauseEnabled: false,
+        automationLevel: "approval_queue",
+      },
+      completedSteps: onboardingStepIds,
+      skippedSteps: [],
+    };
+    const validationMessage = validateOnboardingPayload(payload);
+    if (validationMessage) {
+      setOnboardingMessage("error", validationMessage);
+      return;
+    }
+
+    try {
+      await onboardingAdapter.complete(payload);
+      if (!activeApiBridge()) {
+        brandBrainAdapter.saveLocal(payload.brandProfile);
+        settingsAdapter.saveLocal({ ...settingsAdapter.load(), ...payload.settings });
+      }
+      if (onboardingDemoDraftRequested && window.confirm("Save one mock onboarding draft as needs_review?")) {
+        await createOnboardingDemoDraft();
+      }
+      renderSetupChecklist();
+      renderOnboarding();
+      setOnboardingMessage("success", "Setup complete. You can now generate, review, schedule, and manually export local content.");
+      window.location.hash = "#home";
+    } catch (error) {
+      setOnboardingMessage("error", error.message || "Onboarding could not be completed.");
+    }
+  }
+
+  async function skipOnboarding() {
+    if (!window.confirm("Skip onboarding? You can restart it from Settings, and the app will remain usable.")) {
+      return;
+    }
+    try {
+      await onboardingAdapter.skip("Owner skipped first-run onboarding.");
+      renderSetupChecklist();
+      renderOnboarding();
+      setOnboardingMessage("success", "Onboarding skipped. You can restart it from Settings.");
+      window.location.hash = "#home";
+    } catch (error) {
+      setOnboardingMessage("error", error.message || "Onboarding could not be skipped.");
+    }
+  }
+
+  async function restartOnboarding() {
+    try {
+      await onboardingAdapter.restart();
+      renderSetupChecklist();
+      renderOnboarding();
+      setMessage("success", "Onboarding restarted. Open Onboarding to continue.");
+      window.location.hash = "#onboarding";
+    } catch (error) {
+      setMessage("error", error.message || "Onboarding could not be restarted.");
+    }
+  }
+
+  function maybeRouteToOnboarding() {
+    const state = onboardingAdapter.loadLocal();
+    const currentRoute = routeFromHash();
+    if (
+      !window.location.hash &&
+      !["completed", "skipped"].includes(state.status) &&
+      currentRoute === "home"
+    ) {
+      window.location.hash = "#onboarding";
+    }
+  }
+
+  function setSafetyMessage(kind, text) {
+    const success = getElement("safety-message");
+    const error = getElement("safety-error");
+    if (!success || !error) return;
+    success.hidden = kind !== "success";
+    error.hidden = kind !== "error";
+    success.textContent = kind === "success" ? text : "";
+    error.textContent = kind === "error" ? text : "";
+  }
+
+  function safetyLabel(value) {
+    return String(value || "none").replaceAll("_", " ");
+  }
+
+  function safetyStatusBadge(status) {
+    if (["blocked", "paused", "disabled_by_policy", "needs_attention"].includes(status)) {
+      return "needs-review";
+    }
+    if (["local_only", "local_approval_only", "completed"].includes(status)) {
+      return "local-only";
+    }
+    return "mock-mode";
+  }
+
+  function renderSafetyList(elementId, values) {
+    const element = getElement(elementId);
+    if (!element) return;
+    element.innerHTML = values.length
+      ? values.map((value) => `<li>${escapeHtml(safetyLabel(value))}</li>`).join("")
+      : "<li>None</li>";
+  }
+
+  function renderSafetyCenter(state = safetyCenterAdapter.loadLocal()) {
+    const view = getElement("safety-view");
+    if (!view) return;
+    const paused = Boolean(state.emergencyPause?.enabled);
+    const toggle = getElement("safety-emergency-toggle");
+    if (toggle) {
+      toggle.checked = paused;
+    }
+    getElement("safety-emergency-state").textContent = paused ? "Paused" : "Active";
+    getElement("safety-emergency-enabled-at").textContent = state.emergencyPause?.enabledAt || "-";
+    getElement("safety-emergency-enabled-by").textContent = state.emergencyPause?.enabledBy || "-";
+    getElement("safety-emergency-reason").textContent = state.emergencyPause?.reason || "-";
+
+    getElement("safety-publishing-status").innerHTML = `
+      <span class="status-dot blocked" aria-hidden="true"></span>
+      <strong>Publishing safety status</strong>
+      <span>${escapeHtml(state.publishingSafety?.message || "Real publishing remains disabled")}</span>
+    `;
+    getElement("safety-reply-status").innerHTML = `
+      <span class="status-dot warning" aria-hidden="true"></span>
+      <strong>Reply safety status</strong>
+      <span>${escapeHtml(state.replySafety?.message || "Replies are not sent automatically")}</span>
+    `;
+    getElement("safety-queue-status").innerHTML = `
+      <span class="status-dot ${paused || state.queueProcessing?.disabled ? "blocked" : "safe"}" aria-hidden="true"></span>
+      <strong>Queue processing status</strong>
+      <span>${escapeHtml(state.queueProcessing?.disabled ? "Disabled locally" : safetyLabel(state.queueProcessing?.status || "local_only"))}</span>
+    `;
+
+    const automationSelect = getElement("safety-automation-level");
+    if (automationSelect) {
+      automationSelect.value = state.automationLevel || "approval_queue";
+    }
+    getElement("safety-automation-levels").innerHTML = (state.automationLevels || [])
+      .map((level) => `
+        <article class="safety-row">
+          <span class="card-status ${level.locked ? "needs-review" : level.current ? "local-only" : "mock-mode"}">${escapeHtml(level.current ? "current" : level.locked ? "locked" : "available")}</span>
+          <div><strong>${escapeHtml(level.label)}</strong><p>${escapeHtml(level.note || "")}</p></div>
+        </article>
+      `)
+      .join("");
+
+    const connected = state.connectedAccountSafety || {};
+    getElement("safety-connected-status").innerHTML = `
+      <article class="safety-row"><strong>Connected or limited</strong><span>${escapeHtml(String(connected.connectedOrLimited || 0))}</span></article>
+      <article class="safety-row"><strong>Requires reauth</strong><span>${escapeHtml(String(connected.requiresReauth || 0))}</span></article>
+      <article class="safety-row"><strong>Tokens exposed</strong><span>${connected.tokensExposed ? "Needs attention" : "No"}</span></article>
+    `;
+
+    const flags = state.criticalSafetyFlags || {};
+    const flagRows = Object.entries(flags.byFlag || {});
+    getElement("safety-critical-flags").innerHTML = flagRows.length
+      ? flagRows.map(([flag, count]) => `<article class="safety-row"><strong>${escapeHtml(safetyLabel(flag))}</strong><span>${escapeHtml(String(count))}</span></article>`).join("")
+      : '<p class="result-meta">No critical safety flags found in local draft records.</p>';
+
+    const pending = state.pendingApprovals || {};
+    getElement("safety-pending-approvals").innerHTML = `
+      <article class="safety-row"><strong>Drafts needing review</strong><span>${escapeHtml(String(pending.draftsNeedingReview || 0))}</span></article>
+      <article class="safety-row"><strong>Reply suggestions needing review</strong><span>${escapeHtml(String(pending.replySuggestionsNeedingReview || 0))}</span></article>
+      <article class="safety-row"><strong>Queue items needing attention</strong><span>${escapeHtml(String(pending.queueItemsNeedingAttention || 0))}</span></article>
+    `;
+
+    renderSafetyList("safety-blocked-actions", state.blockedActions || defaultSafetyCenterState.blockedActions);
+    renderSafetyList("safety-allowed-actions", state.allowedActions || defaultSafetyCenterState.allowedActions);
+
+    getElement("safety-kill-actions").innerHTML = (state.killSwitchActions || defaultSafetyCenterState.killSwitchActions)
+      .map((action) => `
+        <article class="safety-kill-action">
+          <div>
+            <h3>${escapeHtml(action.label)}</h3>
+            <p>${escapeHtml(action.description)}</p>
+            <p class="result-meta">Type: ${escapeHtml(action.confirmationPhrase)}</p>
+          </div>
+          <button class="secondary-button" type="button" data-safety-kill-action="${escapeHtml(action.id)}">Run</button>
+        </article>
+      `)
+      .join("");
+
+    const logs = state.auditLogs || [];
+    getElement("safety-audit-log").innerHTML = logs.length
+      ? logs.map((entry) => `
+        <article class="safety-audit-entry">
+          <strong>${escapeHtml(safetyLabel(entry.action))}</strong>
+          <span>${escapeHtml(entry.actorType || "user")} | ${escapeHtml(formatDateTime(entry.createdAt))}</span>
+          <p>${escapeHtml(JSON.stringify(entry.details || {}))}</p>
+        </article>
+      `).join("")
+      : '<p class="result-meta">No safety audit log entries yet.</p>';
+  }
+
+  async function refreshSafetyCenter() {
+    try {
+      const state = await safetyCenterAdapter.refresh();
+      renderSafetyCenter(state);
+      setSafetyMessage("success", "Safety Center refreshed.");
+    } catch (error) {
+      setSafetyMessage("error", error.message || "Safety Center could not refresh.");
+    }
+  }
+
+  async function toggleEmergencyPause(event) {
+    const enabled = Boolean(event.target.checked);
+    const phrase = enabled ? "ENABLE PAUSE" : "DISABLE PAUSE";
+    const typed = window.prompt(`Type ${phrase} to ${enabled ? "enable" : "disable"} emergency pause.`);
+    if (typed !== phrase) {
+      event.target.checked = !enabled;
+      setSafetyMessage("error", "Emergency pause change canceled.");
+      return;
+    }
+    const reason = window.prompt("Optional reason for the safety audit log:") || "";
+    try {
+      const state = await safetyCenterAdapter.setEmergencyPause(enabled, reason);
+      renderSafetyCenter(state);
+      applySettingsToForm(settingsAdapter.load());
+      setSafetyMessage("success", enabled ? "Emergency pause enabled." : "Emergency pause disabled.");
+    } catch (error) {
+      event.target.checked = !enabled;
+      setSafetyMessage("error", error.message || "Emergency pause could not be updated.");
+    }
+  }
+
+  async function changeSafetyAutomationLevel(event) {
+    try {
+      const state = await safetyCenterAdapter.setAutomationLevel(event.target.value);
+      renderSafetyCenter(state);
+      applySettingsToForm(settingsAdapter.load());
+      setSafetyMessage("success", "Automation level updated locally.");
+    } catch (error) {
+      event.target.value = settingsAdapter.load().automationLevel;
+      setSafetyMessage("error", error.message || "Automation level could not be changed.");
+    }
+  }
+
+  async function runKillSwitchAction(actionId) {
+    const action = safetyKillActions[actionId];
+    if (!action) {
+      setSafetyMessage("error", "Unknown kill switch action.");
+      return;
+    }
+    const typed = window.prompt(`${action.label}\n\n${action.description}\n\nType ${action.confirmationPhrase} to confirm.`);
+    if (typed !== action.confirmationPhrase) {
+      setSafetyMessage("error", "Kill switch action canceled.");
+      return;
+    }
+    try {
+      const state = await safetyCenterAdapter.runKillSwitchAction(actionId, typed);
+      renderSafetyCenter(state);
+      renderCalendar();
+      renderPublishQueue();
+      applySettingsToForm(settingsAdapter.load());
+      setSafetyMessage("success", `${action.label} completed locally.`);
+    } catch (error) {
+      setSafetyMessage("error", error.message || "Kill switch action could not run.");
+    }
+  }
+
+  function setBackupMessage(kind, text) {
+    const success = getElement("backup-message");
+    const error = getElement("backup-error");
+    if (!success || !error) return;
+    success.hidden = kind !== "success";
+    error.hidden = kind !== "error";
+    success.textContent = kind === "success" ? text : "";
+    error.textContent = kind === "error" ? text : "";
+  }
+
+  function backupLabel(value) {
+    return String(value || "unknown").replaceAll("_", " ");
+  }
+
+  function renderBackupData(history = backupDataAdapter.loadLocal()) {
+    const view = getElement("backup-view");
+    if (!view) return;
+    const list = getElement("backup-history-list");
+    if (list) {
+      list.innerHTML = history.length
+        ? history.map((item) => `
+          <article class="backup-history-card">
+            <div>
+              <span class="card-status local-only">${escapeHtml(backupLabel(item.backupType))}</span>
+              <h3>${escapeHtml(item.backupId || "Local backup")}</h3>
+              <p>${escapeHtml(item.backupPath || "Path unavailable")}</p>
+            </div>
+            <dl class="backup-history-meta">
+              <div><dt>Created</dt><dd>${escapeHtml(formatDateTime(item.createdAt))}</dd></div>
+              <div><dt>Media</dt><dd>${item.includeMedia ? "Included" : "Metadata only"}</dd></div>
+              <div><dt>Raw tokens</dt><dd>${item.includeSensitiveTokens ? "Included" : "Excluded"}</dd></div>
+            </dl>
+            <button class="secondary-button" type="button" data-backup-preview-path="${escapeHtml(item.backupPath || "")}">Preview restore</button>
+          </article>
+        `).join("")
+        : '<p class="empty-state">No backups found yet. Create one to protect your local data.</p>';
+    }
+  }
+
+  async function refreshBackupHistory() {
+    try {
+      const history = await backupDataAdapter.refresh();
+      renderBackupData(history);
+      setBackupMessage("success", "Backup history refreshed.");
+    } catch (error) {
+      setBackupMessage("error", error.message || "Backup history could not be loaded.");
+    }
+  }
+
+  async function createBackup(eventOrType) {
+    if (eventOrType?.preventDefault) {
+      eventOrType.preventDefault();
+    }
+    const typeOverride = typeof eventOrType === "string" ? eventOrType : null;
+    const backupType = typeOverride || getElement("backup-type")?.value || "full_local_backup";
+    const backupName = getElement("backup-name")?.value || backupType;
+    const includeMedia = Boolean(getElement("backup-include-media")?.checked);
+    const includeTokenMetadata = Boolean(getElement("backup-include-token-metadata")?.checked);
+    try {
+      const { result, history } = await backupDataAdapter.createBackup({
+        backupType,
+        backupName,
+        includeMedia,
+        includeTokenMetadata,
+        includeSensitiveTokens: false,
+      });
+      renderBackupData(history);
+      setBackupMessage(
+        "success",
+        `Created ${backupLabel(result.backupType)} at ${result.backupPath}. Raw tokens are excluded.`,
+      );
+    } catch (error) {
+      setBackupMessage("error", error.message || "Backup could not be created.");
+    }
+  }
+
+  async function previewRestore(eventOrPath) {
+    if (eventOrPath?.preventDefault) {
+      eventOrPath.preventDefault();
+    }
+    const path = typeof eventOrPath === "string"
+      ? eventOrPath
+      : getElement("backup-restore-path")?.value;
+    const output = getElement("backup-restore-preview");
+    if (!path || !path.trim()) {
+      setBackupMessage("error", "Enter a backup folder path to preview.");
+      return;
+    }
+    try {
+      const preview = await backupDataAdapter.previewRestore(path.trim());
+      if (output) {
+        output.innerHTML = `
+          <article class="backup-preview-card">
+            <span class="card-status needs-review">${escapeHtml(backupLabel(preview.status))}</span>
+            <h3>${escapeHtml(backupLabel(preview.backupType))}</h3>
+            <p>${escapeHtml(preview.backupPath || path)}</p>
+            <dl class="backup-history-meta">
+              <div><dt>Requires confirmation</dt><dd>${preview.requiresConfirmation ? "Yes" : "No"}</dd></div>
+              <div><dt>Will restore tokens</dt><dd>${preview.willRestoreTokens ? "Yes" : "No"}</dd></div>
+              <div><dt>Destructive restore</dt><dd>${preview.destructiveRestoreImplemented ? "Implemented" : "Preview only"}</dd></div>
+            </dl>
+            <h4>Restore plan</h4>
+            <ul class="backup-warning-list">${(preview.restorePlan || []).map((step) => `<li>${escapeHtml(step)}</li>`).join("")}</ul>
+            <h4>Warnings</h4>
+            <ul class="backup-warning-list">${(preview.warnings || []).map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul>
+          </article>
+        `;
+      }
+      setBackupMessage("success", "Restore preview loaded. No data was changed.");
+    } catch (error) {
+      if (output) {
+        output.innerHTML = '<p class="result-meta">Restore preview failed. Check the path and manifest.</p>';
+      }
+      setBackupMessage("error", error.message || "Restore preview failed safely.");
+    }
+  }
+
+  function setDiagnosticsMessage(kind, text) {
+    const success = getElement("diagnostics-message");
+    const error = getElement("diagnostics-error");
+    if (!success || !error) return;
+    success.hidden = kind !== "success";
+    error.hidden = kind !== "error";
+    success.textContent = kind === "success" ? text : "";
+    error.textContent = kind === "error" ? text : "";
+  }
+
+  function sectionElementId(sectionId) {
+    const map = {
+      local_storage: "diagnostics-local-storage",
+      database: "diagnostics-database",
+      ai: "diagnostics-ai",
+      social_integrations: "diagnostics-integrations",
+      safety: "diagnostics-safety",
+      queue_jobs: "diagnostics-queue-jobs",
+      content_workflow: "diagnostics-workflow",
+      backups: "diagnostics-backups",
+      recent_errors: "diagnostics-recent-errors",
+    };
+    return map[sectionId];
+  }
+
+  function renderDiagnosticResults(containerId, results = []) {
+    const container = getElement(containerId);
+    if (!container) return;
+    container.innerHTML = results.length
+      ? results.map((result) => `
+        <article class="diagnostics-result-card">
+          <div>
+            <span class="card-status ${diagnosticStatusClass(result.status)}">${escapeHtml(formatStatus(result.status))}</span>
+            <h3>${escapeHtml(result.label)}</h3>
+            <p>${escapeHtml(result.summary)}</p>
+          </div>
+          <dl class="diagnostics-result-meta">
+            <div><dt>Details</dt><dd>${escapeHtml(result.details || "-")}</dd></div>
+            <div><dt>What to do next</dt><dd>${escapeHtml(result.recommendedAction || "No action needed.")}</dd></div>
+            <div><dt>Checked</dt><dd>${escapeHtml(formatDateTime(result.checkedAt))}</dd></div>
+          </dl>
+        </article>
+      `).join("")
+      : '<p class="empty-state">No checks in this section yet.</p>';
+  }
+
+  function renderDiagnostics(diagnostics = diagnosticsAdapter.loadLocal()) {
+    const view = getElement("diagnostics-view");
+    if (!view) return;
+    getElement("diagnostics-overall-status").textContent = formatStatus(diagnostics.overallStatus || "unknown");
+    (diagnostics.sections || []).forEach((section) => {
+      const elementId = sectionElementId(section.id);
+      if (elementId) {
+        renderDiagnosticResults(elementId, section.results || []);
+      }
+    });
+    const nextSteps = getElement("diagnostics-next-steps");
+    if (nextSteps) {
+      const steps = diagnostics.nextSteps || [];
+      nextSteps.innerHTML = steps.length
+        ? `<ul class="diagnostics-next-list">${steps.map((step) => `<li>${escapeHtml(step)}</li>`).join("")}</ul>`
+        : '<p class="empty-state">No urgent action needed. Keep backups current and use manual export until real publishing is enabled.</p>';
+    }
+  }
+
+  async function refreshDiagnostics() {
+    try {
+      const diagnostics = await diagnosticsAdapter.refresh();
+      renderDiagnostics(diagnostics);
+      setDiagnosticsMessage("success", "Diagnostics refreshed. No external APIs were called.");
+    } catch (error) {
+      const safeError = recordFriendlyError(error, "diagnostics_refresh");
+      renderDiagnostics();
+      setDiagnosticsMessage("error", safeError.message || "Diagnostics could not be refreshed.");
+    }
+  }
+
+  async function exportDiagnosticReport() {
+    try {
+      const result = await diagnosticsAdapter.exportReport();
+      renderDiagnostics();
+      setDiagnosticsMessage(
+        "success",
+        `Diagnostic report exported to ${result.reportPath}. Secrets are redacted.`,
+      );
+    } catch (error) {
+      const safeError = recordFriendlyError(error, "diagnostics_export");
+      setDiagnosticsMessage("error", safeError.message || "Diagnostic report could not be exported.");
+    }
+  }
+
+  async function copyDiagnosticSummary() {
+    const diagnostics = diagnosticsAdapter.loadLocal();
+    const text = redactDiagnosticText([
+      `Diagnostics checked: ${diagnostics.checkedAt || "unknown"}`,
+      `Overall status: ${formatStatus(diagnostics.overallStatus || "unknown")}`,
+      ...(diagnostics.nextSteps || []).map((step) => `Next: ${step}`),
+      "No secrets, tokens, authorization codes, or raw provider payloads are included.",
+    ].join("\n"));
+    try {
+      await navigator.clipboard.writeText(text);
+      setDiagnosticsMessage("success", "Diagnostic summary copied.");
+    } catch (_error) {
+      setDiagnosticsMessage("error", "Clipboard is unavailable. Export a diagnostic report instead.");
+    }
   }
 
   function tagsFromInput(value) {
@@ -3814,6 +5743,84 @@
     getElement("social-setup-later").addEventListener("click", chooseAddKeysLater);
   }
 
+  function setupOnboarding() {
+    const view = getElement("onboarding-view");
+    if (!view) {
+      return;
+    }
+
+    renderOnboarding();
+
+    getElement("onboarding-local-data-default")?.addEventListener("click", () => {
+      setOnboardingMessage("success", "Default local data directory confirmed.");
+    });
+
+    getElement("onboarding-media-import")?.addEventListener("click", () => {
+      getElement("onboarding-media-input")?.click();
+    });
+
+    getElement("onboarding-media-input")?.addEventListener("change", async (event) => {
+      const files = Array.from(event.target.files || []);
+      const status = getElement("onboarding-media-status");
+      if (!files.length) {
+        return;
+      }
+      try {
+        const uploaded = [];
+        for (const file of files) {
+          const bridge = activeApiBridge();
+          if (bridge) {
+            uploaded.push(await bridge.upload("/api/media/import", file));
+            await bridge.sync();
+          } else {
+            const asset = importedMediaAssetFromFile(file);
+            mediaLibraryAdapter.add(asset);
+            uploaded.push(asset);
+          }
+        }
+        if (status) {
+          status.textContent = `${uploaded.length} media item${uploaded.length === 1 ? "" : "s"} added locally.`;
+        }
+        renderSetupChecklist();
+        setOnboardingMessage("success", "Media saved locally. You can organize details in Media Library.");
+      } catch (error) {
+        if (status) {
+          status.textContent = "Media import failed.";
+        }
+        setOnboardingMessage("error", error.message || "Media could not be imported.");
+      } finally {
+        event.target.value = "";
+      }
+    });
+
+    getElement("onboarding-media-skip")?.addEventListener("click", () => {
+      const state = onboardingAdapter.loadLocal();
+      onboardingAdapter.saveLocal({
+        ...state,
+        status: state.status === "not_started" ? "in_progress" : state.status,
+        skippedSteps: uniqueStrings([...(state.skippedSteps || []), "media"]),
+      });
+      const status = getElement("onboarding-media-status");
+      if (status) {
+        status.textContent = "Media step skipped. You can upload real media later.";
+      }
+      setOnboardingMessage("success", "Media import skipped for now.");
+      renderSetupChecklist();
+    });
+
+    getElement("onboarding-demo-draft")?.addEventListener("click", () => {
+      onboardingDemoDraftRequested = true;
+      const status = getElement("onboarding-demo-draft-status");
+      if (status) {
+        status.textContent = "Demo draft will be created when you complete onboarding.";
+      }
+      setOnboardingMessage("success", "Demo draft requested. It will be saved as needs review.");
+    });
+
+    getElement("onboarding-complete")?.addEventListener("click", completeOnboarding);
+    getElement("onboarding-skip")?.addEventListener("click", skipOnboarding);
+  }
+
   function routeFromHash() {
     const route = window.location.hash.replace("#", "") || "home";
     return supportedRoutes.includes(route)
@@ -3841,6 +5848,12 @@
           link.removeAttribute("aria-current");
         }
       });
+
+      document.querySelectorAll(".nav-group").forEach((group) => {
+        const hasActiveLink = Boolean(group.querySelector(".nav-link.active"));
+        group.classList.toggle("active", hasActiveLink);
+        group.open = hasActiveLink || (route === "home" && Boolean(group.querySelector('a[href="#generate"]')));
+      });
     }
 
     window.addEventListener("hashchange", () => {
@@ -3857,11 +5870,35 @@
       if (routeFromHash() === "setup") {
         renderSocialSetup();
       }
+      if (routeFromHash() === "safety") {
+        renderSafetyCenter();
+      }
+      if (routeFromHash() === "backup") {
+        renderBackupData();
+      }
+      if (routeFromHash() === "diagnostics") {
+        renderDiagnostics();
+      }
+      if (routeFromHash() === "onboarding") {
+        renderOnboarding();
+      }
+      if (routeFromHash() === "home") {
+        renderControlCenter();
+      }
     });
 
     showRoute(routeFromHash());
+    if (routeFromHash() === "onboarding") {
+      renderOnboarding();
+    }
+    if (routeFromHash() === "home") {
+      renderControlCenter();
+    }
     if (routeFromHash() === "queue") {
       renderPublishQueue();
+    }
+    if (routeFromHash() === "calendar") {
+      renderCalendar();
     }
     if (routeFromHash() === "connected") {
       renderConnectedAccounts();
@@ -3869,6 +5906,86 @@
     if (routeFromHash() === "setup") {
       renderSocialSetup();
     }
+    if (routeFromHash() === "safety") {
+      renderSafetyCenter();
+    }
+    if (routeFromHash() === "backup") {
+      renderBackupData();
+    }
+    if (routeFromHash() === "diagnostics") {
+      renderDiagnostics();
+    }
+  }
+
+  function setupSafetyCenter() {
+    const view = getElement("safety-view");
+    if (!view) {
+      return;
+    }
+
+    renderSafetyCenter();
+    getElement("safety-refresh")?.addEventListener("click", refreshSafetyCenter);
+    getElement("safety-export-report")?.addEventListener("click", () => {
+      runKillSwitchAction("export_safety_report");
+    });
+    getElement("safety-emergency-toggle")?.addEventListener("change", toggleEmergencyPause);
+    getElement("safety-automation-level")?.addEventListener("change", changeSafetyAutomationLevel);
+    getElement("safety-kill-actions")?.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-safety-kill-action]");
+      if (!button) {
+        return;
+      }
+      runKillSwitchAction(button.dataset.safetyKillAction);
+    });
+  }
+
+  function setupBackupData() {
+    const view = getElement("backup-view");
+    if (!view) {
+      return;
+    }
+
+    renderBackupData();
+    getElement("backup-create-form")?.addEventListener("submit", createBackup);
+    getElement("backup-refresh-history")?.addEventListener("click", refreshBackupHistory);
+    getElement("backup-restore-form")?.addEventListener("submit", previewRestore);
+    getElement("backup-export-actions")?.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-backup-export-type]");
+      if (!button) {
+        return;
+      }
+      createBackup(button.dataset.backupExportType);
+    });
+    getElement("backup-history-list")?.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-backup-preview-path]");
+      if (!button) {
+        return;
+      }
+      const path = button.dataset.backupPreviewPath || "";
+      const input = getElement("backup-restore-path");
+      if (input) {
+        input.value = path;
+      }
+      previewRestore(path);
+    });
+  }
+
+  function setupDiagnostics() {
+    const view = getElement("diagnostics-view");
+    if (!view) {
+      return;
+    }
+
+    renderDiagnostics();
+    getElement("diagnostics-refresh")?.addEventListener("click", refreshDiagnostics);
+    getElement("diagnostics-export-report")?.addEventListener("click", exportDiagnosticReport);
+    getElement("diagnostics-copy-report")?.addEventListener("click", copyDiagnosticSummary);
+    window.addEventListener("error", (event) => {
+      recordFriendlyError(event.error || event.message, "window_error");
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      recordFriendlyError(event.reason || "Unhandled promise rejection", "unhandled_rejection");
+    });
   }
 
   function setupSettingsForm() {
@@ -3924,6 +6041,8 @@
         setMessage("error", error.message || "Settings could not be reset in local SQLite.");
       }
     });
+
+    getElement("settings-restart-onboarding")?.addEventListener("click", restartOnboarding);
   }
 
   function setupBrandBrainForm() {
@@ -4092,14 +6211,26 @@
     setupPublishQueue();
     setupConnectedAccounts();
     setupSocialSetup();
+    setupOnboarding();
+    setupSafetyCenter();
+    setupBackupData();
+    setupDiagnostics();
     setupSettingsForm();
     setupBrandBrainForm();
+    renderControlCenter();
+    maybeRouteToOnboarding();
     window.addEventListener("local-api-ready", () => {
       renderMediaLibrary();
       renderCalendar();
       renderPublishQueue();
       renderConnectedAccounts();
       renderSocialSetup();
+      renderOnboarding();
+      renderSafetyCenter();
+      renderBackupData();
+      renderDiagnostics();
+      renderControlCenter();
+      maybeRouteToOnboarding();
       if (routeFromHash() === "settings") {
         applySettingsToForm(settingsAdapter.load());
       }

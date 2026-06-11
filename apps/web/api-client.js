@@ -8,6 +8,10 @@
 (function () {
   const storageKeys = {
     settings: "local-social-ai-manager.settings",
+    onboarding: "local-social-ai-manager.onboarding",
+    setupChecklist: "local-social-ai-manager.setupChecklist",
+    safetyCenter: "local-social-ai-manager.safetyCenter",
+    backupHistory: "local-social-ai-manager.backupHistory",
     brandProfile: "local-social-ai-manager.brandBrain",
     mediaAssets: "local-social-ai-manager.mediaLibrary",
     drafts: "local-social-ai-manager.drafts",
@@ -24,6 +28,8 @@
     replyApprovals: "local-social-ai-manager.replyApprovals",
     aiMemory: "local-social-ai-manager.aiMemory",
     weeklyReports: "local-social-ai-manager.weeklyReports",
+    diagnostics: "local-social-ai-manager.diagnostics",
+    recentErrors: "local-social-ai-manager.recentErrors",
   };
 
   function apiUrl(path) {

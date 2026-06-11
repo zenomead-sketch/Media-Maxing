@@ -77,6 +77,7 @@ AI_MEMORY_CONFIDENCE_LEVELS = (
 
 AI_MEMORY_STATUSES = (
     "active",
+    "dismissed",
     "archived",
     "superseded",
 )

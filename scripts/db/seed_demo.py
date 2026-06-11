@@ -941,6 +941,54 @@ def seed_demo_database(database_path: str | Path | None = None) -> Path:
                         "leads": 2,
                     }
                 ),
+                "underperforming_posts_json": _json([]),
+                "engagement_summary_json": _json(
+                    {
+                        "totalItems": 0,
+                        "needsReply": 0,
+                        "complaints": 0,
+                        "leadSignals": 0,
+                        "urgentItems": 0,
+                        "spamItems": 0,
+                        "sources": [],
+                    }
+                ),
+                "lead_signals_json": _json(
+                    ["2 demo-only lead signals came from local mock metrics."]
+                ),
+                "learning_updates_json": _json(
+                    [
+                        {
+                            "id": "demo-memory-before-after",
+                            "memoryType": "performance_learning",
+                            "title": "Before-and-after posts may be useful",
+                            "confidence": "low",
+                            "source": "mock",
+                        }
+                    ]
+                ),
+                "next_week_content_suggestions_json": _json(
+                    [
+                        "Test one more owner-reviewed transformation post and compare local metrics."
+                    ]
+                ),
+                "evidence_json": _json(
+                    {
+                        "analyticsSnapshotIds": ["demo-analytics-driveway-export"],
+                        "engagementItemIds": [],
+                        "learningMemoryIds": ["demo-memory-before-after"],
+                        "privateEngagementContentStored": False,
+                        "localOnly": True,
+                    }
+                ),
+                "prompt_metadata_json": _json(
+                    {
+                        "generator": "rule_based_local_v1",
+                        "aiProviderCalled": False,
+                        "externalDataSent": False,
+                        "localOnly": True,
+                    }
+                ),
                 "generated_by": "ai_mock",
                 "created_at": DEMO_NOW,
                 "updated_at": DEMO_NOW,

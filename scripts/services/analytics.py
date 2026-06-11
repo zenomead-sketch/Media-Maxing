@@ -494,7 +494,13 @@ class AnalyticsService:
                         f"{_label(best['contentAngle'])} posts currently have the strongest "
                         "local performance score. Treat this as a pattern to test, not a guarantee."
                     ),
-                    "evidence": {"breakdown": best, "dataPoints": best["postCount"]},
+                    "evidence": {
+                        "breakdown": best,
+                        "dataPoints": best["postCount"],
+                        "consistent": _has_consistent_leader(
+                            metrics, "contentAngle", best["contentAngle"]
+                        ),
+                    },
                     "recommended_action": "Create another reviewed post with this angle and compare results.",
                 }
             )
@@ -510,7 +516,13 @@ class AnalyticsService:
                         f"{_label(best['platform'])} has the strongest local comparison score "
                         "for the selected data range."
                     ),
-                    "evidence": {"breakdown": best, "dataPoints": best["postCount"]},
+                    "evidence": {
+                        "breakdown": best,
+                        "dataPoints": best["postCount"],
+                        "consistent": _has_consistent_leader(
+                            metrics, "platform", best["platform"]
+                        ),
+                    },
                     "recommended_action": "Keep collecting comparable metrics before shifting strategy.",
                 }
             )
@@ -525,6 +537,12 @@ class AnalyticsService:
                     "evidence": {
                         "dataPoints": len(educational),
                         "totalSaves": sum(metric.totalSaves for metric in educational),
+                        "consistent": (
+                            len(educational) > 20
+                            and sum(metric.totalSaves > 0 for metric in educational)
+                            / len(educational)
+                            >= 0.7
+                        ),
                     },
                     "recommended_action": "Test another practical educational post.",
                 }
@@ -863,7 +881,10 @@ class AnalyticsService:
             )
         )
         data_points = int(candidate["evidence"].get("dataPoints", len(metrics)))
-        confidence = _confidence(data_points)
+        confidence = _confidence(
+            data_points,
+            consistent=bool(candidate["evidence"].get("consistent", False)),
+        )
         post_ids = [
             metric.publishedPostId or metric.generatedPostId or metric.id for metric in metrics
         ]
@@ -1207,12 +1228,23 @@ def _trend(first_score: float, latest_score: float, count: int) -> str:
     return "flat"
 
 
-def _confidence(data_points: int) -> str:
+def _confidence(data_points: int, *, consistent: bool = False) -> str:
     if data_points < 5:
         return "low"
     if data_points <= 20:
         return "medium"
-    return "high"
+    return "high" if consistent else "medium"
+
+
+def _has_consistent_leader(
+    metrics: list[PostPerformanceMetrics],
+    field_name: str,
+    expected: str,
+) -> bool:
+    if len(metrics) <= 20:
+        return False
+    matching = sum(getattr(metric, field_name) == expected for metric in metrics)
+    return matching / len(metrics) >= 0.7
 
 
 def _metric_value(metrics: dict[str, Any], field_name: str) -> int:

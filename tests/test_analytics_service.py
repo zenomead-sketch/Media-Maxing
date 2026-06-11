@@ -35,6 +35,26 @@ class AnalyticsServiceTest(unittest.TestCase):
         self.assertEqual(rates["leadRate"], 0)
         self.assertEqual(score, 0)
 
+    def test_rate_and_score_formulas_match_documented_mvp_math(self):
+        metrics = {
+            "impressions": 200,
+            "reach": 160,
+            "views": 50,
+            "likes": 12,
+            "comments": 3,
+            "shares": 2,
+            "saves": 3,
+            "clicks": 10,
+            "leads": 2,
+        }
+
+        rates = calculate_analytics_rates(metrics)
+
+        self.assertEqual(rates["engagementRate"], 0.1)
+        self.assertEqual(rates["clickThroughRate"], 0.05)
+        self.assertEqual(rates["leadRate"], 0.01)
+        self.assertEqual(calculate_performance_score(metrics), 8.3)
+
     def test_create_update_and_list_manual_snapshot(self):
         db_path = self._database()
         service = AnalyticsService(db_path)

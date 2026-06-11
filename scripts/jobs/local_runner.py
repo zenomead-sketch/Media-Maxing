@@ -112,6 +112,14 @@ class LocalJobRunner:
 
         try:
             stale_locks = self.cleanup_old_job_locks(now=now_dt)
+            if self._queue_processing_disabled():
+                return JobRunSummary(
+                    lockAcquired=True,
+                    staleLocksCleaned=stale_locks,
+                    notes=[
+                        "Queue processing is disabled by the Safety Center kill switch."
+                    ],
+                )
             missed = self.mark_missed_scheduled_posts(
                 now=now_dt,
                 threshold_hours=missed_threshold_hours,
@@ -679,6 +687,19 @@ class LocalJobRunner:
                 """,
                 (scheduled_id,),
             ).fetchone()
+
+    def _queue_processing_disabled(self) -> bool:
+        with closing(sqlite3.connect(self.database_path)) as connection:
+            row = connection.execute(
+                "SELECT settings_json FROM app_settings ORDER BY updated_at DESC LIMIT 1"
+            ).fetchone()
+        if row is None:
+            return False
+        settings_json = _decode_json(row[0], {})
+        safety_center = settings_json.get("safetyCenter")
+        return isinstance(safety_center, dict) and bool(
+            safety_center.get("queueProcessingDisabled")
+        )
 
     def _brand_exists(self, brand_profile_id: str) -> bool:
         with closing(sqlite3.connect(self.database_path)) as connection:
