@@ -1,4 +1,4 @@
-# local-social-ai-manager
+# Media-Maxing
 
 A local-first AI social media manager for small businesses, local service businesses, and owner-operators.
 
