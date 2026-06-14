@@ -16,6 +16,20 @@ from apps.api.local_server import (
 from scripts.db.seed_demo import DEMO_BRAND_ID, seed_demo_database
 
 
+class _FakeOllamaResponse:
+    def __init__(self, text: str):
+        self._payload = json.dumps({"response": text}).encode("utf-8")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        return False
+
+    def read(self):
+        return self._payload
+
+
 class LocalApiServerTest(unittest.TestCase):
     def _application(self) -> LocalApiApplication:
         temp_dir = tempfile.TemporaryDirectory()
@@ -366,6 +380,43 @@ class LocalApiServerTest(unittest.TestCase):
             ["demo-media-driveway-before"],
         )
 
+    def test_content_generation_can_use_settings_provider_preference_for_local_ai(self):
+        app = self._application()
+        app.dispatch("PATCH", "/api/settings", body={"aiProviderPreference": "local"})
+
+        env = {
+            "APP_ENV": "development",
+            "ENABLE_LOCAL_AI_CALLS": "true",
+            "LOCAL_AI_BASE_URL": "http://127.0.0.1:11434",
+            "LOCAL_AI_MODEL": "test-local-model",
+        }
+        with patch.dict("os.environ", env, clear=False):
+            with patch(
+                "scripts.ai.providers.local.urllib.request.urlopen",
+                return_value=_FakeOllamaResponse(
+                    "Local model draft for a real service business. Message us for next steps."
+                ),
+            ):
+                bundle = app.dispatch(
+                    "POST",
+                    "/api/content-generation",
+                    body={
+                        "input": {
+                            "brandProfileId": DEMO_BRAND_ID,
+                            "contentGoal": "show_transformation",
+                            "contentAngle": "before_after",
+                            "selectedPlatforms": ["instagram"],
+                            "selectedMediaIds": ["demo-media-driveway-before"],
+                            "userInstructions": "Keep the message practical.",
+                        }
+                    },
+                ).body
+
+        self.assertEqual(bundle["generationProvider"], "local")
+        self.assertEqual(bundle["providerMetadata"]["model"], "test-local-model")
+        self.assertTrue(bundle["providerMetadata"]["localOnly"])
+        self.assertIn("local model draft", bundle["posts"][0]["caption"].lower())
+
     def test_draft_calendar_queue_and_media_actions_persist(self):
         app = self._application()
 
@@ -430,6 +481,18 @@ class LocalApiServerTest(unittest.TestCase):
                 for item in reloaded["mediaAssets"]
             )
         )
+
+    def test_facebook_publish_route_requires_explicit_confirmation(self):
+        app = self._application()
+
+        with self.assertRaises(Exception) as raised:
+            app.dispatch(
+                "POST",
+                "/api/publish-queue/demo-queue-gutter-reminder/publish-facebook",
+                body={"confirmationPhrase": "publish"},
+            )
+
+        self.assertIn("confirmation_required", getattr(raised.exception, "error_codes", []))
 
     def test_calendar_attention_insight_and_mock_connector_actions_persist(self):
         app = self._application()

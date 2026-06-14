@@ -37,7 +37,7 @@ class WebOnboardingScreenTest(unittest.TestCase):
             "Nothing publishes without approval",
             "Real social connections can be configured later",
             "Mock/demo mode is available",
-            "Real publishing: disabled",
+            "Real publishing: locked by default",
             "Real auto-replies: disabled",
         ):
             self.assertIn(copy, self.html)

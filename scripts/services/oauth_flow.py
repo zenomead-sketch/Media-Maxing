@@ -22,6 +22,7 @@ from scripts.connectors.registry import (
     get_connector,
     list_connector_metadata,
 )
+from scripts.connectors.types import OAuthStartRequest
 from scripts.db.init_db import initialize_database, resolve_database_path
 from scripts.db.social_connections import (
     create_connector_audit_log,
@@ -145,8 +146,70 @@ class OAuthFlowService:
         parsed_now = _parse_datetime(now)
         expires_at = parsed_now + timedelta(seconds=self.state_ttl_seconds)
         state = secrets.token_urlsafe(32)
-        state_hash = _hash_state(state)
         scopes = requested_scopes or [scope.id for scope in connector.getRequiredScopes()]
+        mode = "mock" if self.integrations_mode == "mock" else "real"
+        if self.integrations_mode == "disabled":
+            self._audit(
+                normalized_platform,
+                action="oauth_start",
+                status="blocked",
+                message="OAuth start is disabled by INTEGRATIONS_MODE.",
+                safe_metadata={"requestedScopes": scopes, "mode": "disabled"},
+            )
+            return OAuthStartServiceResult(
+                success=False,
+                platform=normalized_platform,
+                status="oauth_disabled",
+                message="OAuth start is disabled by integration settings.",
+            )
+        if mode == "real" and not (
+            _env_truthy(os.environ.get("ENABLE_REAL_OAUTH"))
+            or self.integrations_mode == "real_oauth"
+        ):
+            self._audit(
+                normalized_platform,
+                action="oauth_start",
+                status="blocked",
+                message="Real OAuth start is disabled by feature flags.",
+                safe_metadata={"requestedScopes": scopes, "mode": mode},
+            )
+            return OAuthStartServiceResult(
+                success=False,
+                platform=normalized_platform,
+                status="real_oauth_disabled",
+                message="Real OAuth start is disabled. Set ENABLE_REAL_OAUTH=true or INTEGRATIONS_MODE=real_oauth after configuring credentials.",
+            )
+        connector_start = connector.buildAuthorizationUrl(
+            OAuthStartRequest(
+                platform=normalized_platform,
+                redirectUri=redirect_uri,
+                requestedScopes=tuple(scopes),
+                metadata={"state": state, "mode": mode},
+            )
+        )
+        if not connector_start.success or not connector_start.authorizationUrl:
+            self._audit(
+                normalized_platform,
+                action="oauth_start",
+                status="failed",
+                message=connector_start.message or "OAuth start was not ready.",
+                safe_metadata={
+                    "requestedScopes": scopes,
+                    "mode": mode,
+                    "connectorStatus": connector_start.status,
+                },
+            )
+            return OAuthStartServiceResult(
+                success=False,
+                platform=normalized_platform,
+                status=connector_start.status,
+                message=connector_start.message,
+                warnings=[
+                    "oauth_start_blocked: Fix platform setup before starting OAuth."
+                ],
+            )
+
+        state_hash = _hash_state(state)
         state_id = create_oauth_state_record(
             self.database_path,
             platform=normalized_platform,
@@ -156,34 +219,37 @@ class OAuthFlowService:
             expires_at=_to_iso(expires_at),
             now=_to_iso(parsed_now),
         )
-        authorization_url = self._build_authorization_url(
-            platform=normalized_platform,
-            redirect_uri=redirect_uri,
-            state=state,
-            scopes=scopes,
-        )
         self._audit(
             normalized_platform,
             action="oauth_start",
             status="succeeded",
-            message="Mock OAuth start created local state.",
+            message=(
+                "Mock OAuth start created local state."
+                if mode == "mock"
+                else "Real OAuth start created local state and provider redirect URL."
+            ),
             safe_metadata={
                 "stateId": state_id,
                 "requestedScopes": scopes,
                 "expiresAt": _to_iso(expires_at),
-                "mode": "mock",
+                "mode": mode,
+                "connectorStatus": connector_start.status,
             },
         )
         return OAuthStartServiceResult(
             success=True,
             platform=normalized_platform,
-            status="redirect_ready",
-            message="Mock OAuth authorization URL created.",
-            authorizationUrl=authorization_url,
+            status="redirect_ready" if mode == "mock" else connector_start.status or "redirect_ready",
+            message=connector_start.message or "OAuth authorization URL created.",
+            authorizationUrl=connector_start.authorizationUrl,
             stateId=state_id,
             expiresAt=_to_iso(expires_at),
             warnings=[
                 "mock_oauth_only: No real platform OAuth request is made by default."
+            ]
+            if mode == "mock"
+            else [
+                "real_oauth_only: This starts OAuth only. Publishing remains disabled."
             ],
         )
 

@@ -27,20 +27,76 @@ Do not add fake real credentials to docs, commits, issues, or screenshots.
 
 ## Run the app
 
-Initialize the database: `python -m scripts.db.init_db --database data/app.sqlite`.
+The easiest Windows path is to double-click `start-media-maxing.bat` in the
+project folder.
 
-Seed demo data: use this to seed demo data for practice:
-`python -m scripts.db.seed_demo --database data/app.sqlite`.
+If you are using a terminal, run:
 
-Start the local app: `python -m apps.api.local_server --database data/app.sqlite --port 8000`.
+```powershell
+python -m scripts.local_beta_launcher
+```
 
-Open the app at `http://127.0.0.1:8000`.
+This starts the local database/API bridge and the web app together, then opens
+Control Center at `http://127.0.0.1:8044/#home`.
+
+To practice with safe fake data, seed demo data by running
+`python -m scripts.local_beta_launcher --seed-demo`.
+
+Advanced/manual startup is still available for troubleshooting:
+
+```powershell
+python -m scripts.db.init_db --database data/app.sqlite
+python -m scripts.db.seed_demo --database data/app.sqlite
+python -m apps.api.local_server --database data/app.sqlite --port 8000
+```
+
+When the launcher is running, start from Control Center. It points you to the
+next useful daily action and keeps setup/admin screens available in the sidebar.
+
+## Demo-day QA
+
+When you want to check the full local workflow, run `python -m scripts.demo_day_check`.
+
+The demo-day check walks through onboarding, media, Generate, Drafts, Calendar,
+Publish Queue, Manual Export, Analytics, Engagement Inbox, reply approval, AI
+memory, weekly reports, Backup & Data, and Diagnostics. It does not call real
+APIs, publish posts, or send replies.
 
 ## Use mock mode
 
 Mock mode is the default. It lets you generate draft examples, mock analytics,
 mock engagement items, and mock social account connections. Mock data is fake
 and should not be treated as real business performance.
+
+## Use local Ollama generation, optional
+
+If your computer can run a local model, you can use Ollama for draft generation
+without sending prompts to a cloud AI provider.
+
+1. Install and start Ollama outside this app.
+2. Pull the model named in `.env`, for example `ollama pull llama3.1:8b`.
+3. In `.env`, set `ENABLE_LOCAL_AI_CALLS=true`.
+4. Keep `LOCAL_AI_BASE_URL=http://127.0.0.1:11434`.
+5. In Settings, choose `Local AI runtime, Ollama`.
+6. Generate drafts normally.
+
+If Ollama is not running or the model is missing, generation will show a local
+AI error. Switch Settings back to mock mode to keep testing without Ollama.
+Cloud AI APIs are still optional later configuration; do not paste API keys into
+the browser UI.
+
+## Add enough real media for better drafts
+
+You can test the app with demo media, but real generation improves when the app
+has enough of your own job photos and videos. Use 5 real media items as the
+starter minimum, and aim for 20 before serious content planning. Strong local
+libraries usually have 50 or more items; 100 or more gives the app excellent
+content memory.
+
+For the first 20, try to include before/after examples, finished job photos,
+behind-the-scenes process, team/process shots, customer problem examples, and
+seasonal or location-specific examples. The app will not block generation under
+20 items; it will show guidance so you know why a draft may feel less specific.
 
 ## What not to touch
 

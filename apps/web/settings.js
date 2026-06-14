@@ -14,6 +14,7 @@
   const APPROVAL_LOGS_KEY = "local-social-ai-manager.approvalLogs";
   const CONNECTED_ACCOUNTS_KEY = "local-social-ai-manager.connectedAccounts";
   const CONNECTOR_AUDIT_KEY = "local-social-ai-manager.connectorAudit";
+  const FACEBOOK_PUBLISH_CONFIRMATION = "PUBLISH TO FACEBOOK";
   const mediaStatuses = ["new", "reviewed", "ready_for_generation", "used_in_draft", "published", "archived"];
   const contentAngles = [
     "before_after",
@@ -28,6 +29,10 @@
     "other",
   ];
   const platformIds = ["facebook", "instagram", "threads", "youtube", "tiktok", "linkedin", "x"];
+  const MEDIA_READINESS_STARTER_MINIMUM = 5;
+  const MEDIA_READINESS_RECOMMENDED_MINIMUM = 20;
+  const MEDIA_READINESS_STRONG_MINIMUM = 50;
+  const MEDIA_READINESS_EXCELLENT_MINIMUM = 100;
   const automationLevels = [
     "manual_assist",
     "approval_queue",
@@ -36,6 +41,59 @@
     "autonomous_content_engine",
   ];
   const providerIds = ["mock", "local", "openai", "anthropic"];
+  const themeColorSchemes = [
+    {
+      id: "classic_blue",
+      label: "Classic Blue",
+      swatches: ["#2563eb", "#f6f7f9", "#16856a"],
+    },
+    {
+      id: "forest_green",
+      label: "Forest Green",
+      swatches: ["#257a4c", "#f3f8f4", "#9a630d"],
+    },
+    {
+      id: "sunrise_coral",
+      label: "Sunrise Coral",
+      swatches: ["#d0523f", "#fff7f3", "#1a7d63"],
+    },
+    {
+      id: "slate_violet",
+      label: "Slate Violet",
+      swatches: ["#6356b7", "#f5f4fa", "#15775f"],
+    },
+    {
+      id: "teal_mint",
+      label: "Teal Mint",
+      swatches: ["#087f83", "#f1f8f8", "#98620d"],
+    },
+    {
+      id: "graphite_gold",
+      label: "Graphite Gold",
+      swatches: ["#946c16", "#f7f6f1", "#1f2328"],
+    },
+    {
+      id: "rose_plum",
+      label: "Rose Plum",
+      swatches: ["#b23a6f", "#fbf4f7", "#177a61"],
+    },
+    {
+      id: "sky_indigo",
+      label: "Sky Indigo",
+      swatches: ["#2d6fb5", "#f3f7fb", "#214f86"],
+    },
+    {
+      id: "olive_sage",
+      label: "Olive Sage",
+      swatches: ["#687d23", "#f7f8f1", "#98630e"],
+    },
+    {
+      id: "espresso_sand",
+      label: "Espresso Sand",
+      swatches: ["#795a38", "#f8f5ef", "#18785f"],
+    },
+  ];
+  const themeColorSchemeIds = themeColorSchemes.map((scheme) => scheme.id);
   const scheduledPostStatuses = [
     "scheduled",
     "queued",
@@ -46,7 +104,7 @@
     "needs_attention",
   ];
   const mutableQueueStatuses = ["waiting", "blocked"];
-  const processedQueueStatuses = ["processing", "mock_published", "manually_exported"];
+  const processedQueueStatuses = ["processing", "mock_published", "manually_exported", "platform_published"];
   const queueStatuses = [
     "waiting",
     "ready",
@@ -54,6 +112,7 @@
     "processing",
     "mock_published",
     "manually_exported",
+    "platform_published",
     "failed",
     "canceled",
     "skipped",
@@ -405,6 +464,7 @@
     requireApprovalBeforeReplying: true,
     emergencyPauseEnabled: false,
     aiProviderPreference: "mock",
+    themeColorScheme: "classic_blue",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -448,7 +508,7 @@
       realPublishingEnabled: false,
       futureRealPublishingEligible: false,
       status: "disabled_by_policy",
-      message: "Real publishing remains disabled in this build.",
+      message: "Real publishing is locked by default. Facebook text posts require explicit flags and typed confirmation.",
     },
     replySafety: {
       realReplySendingEnabled: false,
@@ -793,6 +853,7 @@
       requireApprovalBeforeReplying: Boolean(settings.requireApprovalBeforeReplying),
       emergencyPauseEnabled: Boolean(settings.emergencyPauseEnabled),
       aiProviderPreference: settings.aiProviderPreference,
+      themeColorScheme: settings.themeColorScheme,
     };
   }
 
@@ -1751,7 +1812,7 @@
       providerResponse: {
         source: "Local browser Publish Queue adapter",
         realPublishing: false,
-        note: details?.note || "Local-only queue action. Future real publishing remains disabled.",
+        note: details?.note || "Local-only queue action. Facebook real publishing uses a separate guarded API path.",
       },
       createdAt: now,
     });
@@ -2168,6 +2229,55 @@
     return `${count} ${count === 1 ? singular : plural}`;
   }
 
+  function mediaReadinessForCount(count) {
+    const safeCount = Math.max(Number(count) || 0, 0);
+    const percent = Math.min(100, Math.round((safeCount / MEDIA_READINESS_RECOMMENDED_MINIMUM) * 100));
+
+    if (safeCount >= MEDIA_READINESS_EXCELLENT_MINIMUM) {
+      return {
+        tier: "Excellent content memory",
+        statusClass: "local-only",
+        summary: "Excellent media base. The generator has a deep local library to pull context from.",
+        next: "Keep adding new job examples so future drafts stay current.",
+        progress: 100,
+      };
+    }
+    if (safeCount >= MEDIA_READINESS_STRONG_MINIMUM) {
+      return {
+        tier: "Strong media library",
+        statusClass: "local-only",
+        summary: "Strong media base. This should support varied and specific draft ideas.",
+        next: `Add ${MEDIA_READINESS_EXCELLENT_MINIMUM - safeCount} more items over time to build excellent content memory.`,
+        progress: 100,
+      };
+    }
+    if (safeCount >= MEDIA_READINESS_RECOMMENDED_MINIMUM) {
+      return {
+        tier: "Ready for good generation",
+        statusClass: "local-only",
+        summary: "Ready for good generation. The app has enough local media context for stronger drafts.",
+        next: "Keep adding real work examples after each job to improve variety.",
+        progress: 100,
+      };
+    }
+    if (safeCount >= MEDIA_READINESS_STARTER_MINIMUM) {
+      return {
+        tier: "Starter mode",
+        statusClass: "mock-mode",
+        summary: "Starter mode is enough for testing, but drafts will get more personal with more real media.",
+        next: `Add ${MEDIA_READINESS_RECOMMENDED_MINIMUM - safeCount} more real items to reach the recommended 20-item threshold.`,
+        progress: percent,
+      };
+    }
+    return {
+      tier: "Not enough yet",
+      statusClass: "needs-review",
+      summary: "Upload a few real job photos or videos before relying on generated drafts.",
+      next: `Add ${MEDIA_READINESS_STARTER_MINIMUM - safeCount} more item${MEDIA_READINESS_STARTER_MINIMUM - safeCount === 1 ? "" : "s"} to reach starter mode, then build toward 20.`,
+      progress: percent,
+    };
+  }
+
   function draftTitle(draft) {
     return draft?.headline || draft?.hook || draft?.caption?.slice(0, 54) || "Untitled draft";
   }
@@ -2309,11 +2419,22 @@
     if (!snapshot.media.length) {
       return {
         title: "Add your first media",
-        copy: "Upload or import job photos/videos so generated content can be grounded in real work.",
+        copy: "Upload or import job photos/videos so generated content can be grounded in real work. Five items starts demo mode; 20 real items is the recommended threshold.",
         href: "#media",
         actionText: "Open Media Library",
         status: "Local media",
         statusClass: "local-only",
+      };
+    }
+    if (snapshot.mediaReady.length < MEDIA_READINESS_RECOMMENDED_MINIMUM && !snapshot.drafts.length) {
+      const readiness = mediaReadinessForCount(snapshot.mediaReady.length);
+      return {
+        title: "Build your media base",
+        copy: `${readiness.summary} ${readiness.next} You can still generate a starter draft anytime.`,
+        href: "#media",
+        actionText: "Add more media",
+        status: readiness.tier,
+        statusClass: readiness.statusClass,
       };
     }
     if (!snapshot.drafts.length) {
@@ -2486,13 +2607,14 @@
       });
     }
     if (snapshot.mediaReady.length) {
+      const readiness = mediaReadinessForCount(snapshot.mediaReady.length);
       ready.push({
-        title: "Media is ready for content ideas",
-        copy: `${pluralize(snapshot.mediaReady.length, "media item")} can support new mock drafts.`,
+        title: "Media can support content ideas",
+        copy: `${pluralize(snapshot.mediaReady.length, "media item")} available. ${readiness.summary}`,
         href: "#generate",
         actionText: "Generate",
-        status: "Mock Data",
-        statusClass: "mock-mode",
+        status: readiness.tier,
+        statusClass: readiness.statusClass,
       });
     }
 
@@ -2606,7 +2728,7 @@
     const copy = {
       brand_profile_created: "Add the first Brand Brain profile before generating real drafts.",
       local_data_ready: "Use a stable local folder, not a temporary download or cache folder.",
-      safety_settings_confirmed: "Approval stays required and real publishing remains disabled.",
+      safety_settings_confirmed: "Approval stays required and real publishing stays locked by default.",
       media_added: "Upload or import at least one real photo or video when ready.",
       first_draft_generated: "Generate a mock draft and save it as needs_review.",
       first_draft_approved: "Approve a reviewed draft before scheduling.",
@@ -2877,7 +2999,7 @@
     getElement("safety-publishing-status").innerHTML = `
       <span class="status-dot blocked" aria-hidden="true"></span>
       <strong>Publishing safety status</strong>
-      <span>${escapeHtml(state.publishingSafety?.message || "Real publishing remains disabled")}</span>
+      <span>${escapeHtml(state.publishingSafety?.message || "Real publishing is locked by default")}</span>
     `;
     getElement("safety-reply-status").innerHTML = `
       <span class="status-dot warning" aria-hidden="true"></span>
@@ -3261,6 +3383,40 @@
     return Array.from(new Set((values || []).filter(Boolean)));
   }
 
+  function themeColorSchemeById(themeId) {
+    return themeColorSchemes.find((scheme) => scheme.id === themeId) || themeColorSchemes[0];
+  }
+
+  function normalizeThemeColorScheme(themeId) {
+    return themeColorSchemeIds.includes(themeId) ? themeId : defaultSettings.themeColorScheme;
+  }
+
+  function applyThemeColorScheme(themeId) {
+    const normalizedThemeId = normalizeThemeColorScheme(themeId);
+    if (document.body) {
+      document.body.dataset.theme = normalizedThemeId;
+    }
+  }
+
+  function renderThemeColorSchemePreview(themeId) {
+    const preview = getElement("themeColorSchemePreview");
+    if (!preview) {
+      return;
+    }
+
+    const scheme = themeColorSchemeById(normalizeThemeColorScheme(themeId));
+    const name = preview.querySelector(".theme-scheme-name");
+    const swatches = Array.from(preview.querySelectorAll(".theme-swatch"));
+
+    if (name) {
+      name.textContent = scheme.label;
+    }
+
+    swatches.forEach((swatch, index) => {
+      swatch.style.background = scheme.swatches[index] || scheme.swatches[0];
+    });
+  }
+
   function validateSettings(settings) {
     if (!settings.appName.trim()) {
       return "App name is required.";
@@ -3291,6 +3447,10 @@
 
     if (!providerIds.includes(settings.aiProviderPreference)) {
       return `Unsupported AI provider preference: ${settings.aiProviderPreference}.`;
+    }
+
+    if (!themeColorSchemeIds.includes(settings.themeColorScheme)) {
+      return `Unsupported color scheme: ${settings.themeColorScheme}.`;
     }
 
     if (settings.automationLevel === "autonomous_content_engine") {
@@ -3324,6 +3484,7 @@
       requireApprovalBeforeReplying: getElement("requireApprovalBeforeReplying").checked,
       emergencyPauseEnabled: getElement("emergencyPauseEnabled").checked,
       aiProviderPreference: getElement("aiProviderPreference").value,
+      themeColorScheme: getElement("themeColorScheme").value,
     };
   }
 
@@ -3453,6 +3614,10 @@
     );
     getElement("emergencyPauseEnabled").checked = Boolean(settings.emergencyPauseEnabled);
     getElement("aiProviderPreference").value = settings.aiProviderPreference;
+    const themeId = normalizeThemeColorScheme(settings.themeColorScheme);
+    getElement("themeColorScheme").value = themeId;
+    applyThemeColorScheme(themeId);
+    renderThemeColorSchemePreview(themeId);
 
     document.querySelectorAll('input[name="defaultPlatformTargets"]').forEach((input) => {
       input.checked = settings.defaultPlatformTargets.includes(input.value);
@@ -3584,15 +3749,44 @@
       const visibleAssets = filterMediaAssets(assets);
 
       count.textContent = String(visibleAssets.length);
+      renderMediaReadiness(assets.length);
       grid.innerHTML = visibleAssets.map(mediaCardMarkup).join("");
       empty.hidden = visibleAssets.length > 0;
     } catch (_error) {
       grid.innerHTML = "";
       empty.hidden = true;
       count.textContent = "0";
+      renderMediaReadiness(0);
       setMediaError("Media Library could not load from the local demo adapter.");
     } finally {
       loading.hidden = true;
+    }
+  }
+
+  function renderMediaReadiness(assetCount) {
+    const readiness = mediaReadinessForCount(assetCount);
+    const tier = getElement("media-readiness-tier");
+    const summary = getElement("media-readiness-summary");
+    const count = getElement("media-readiness-count");
+    const next = getElement("media-readiness-next");
+    const progress = getElement("media-readiness-progress");
+
+    if (tier) {
+      tier.className = `card-status ${readiness.statusClass}`;
+      tier.textContent = readiness.tier;
+    }
+    if (summary) {
+      summary.textContent = readiness.summary;
+    }
+    if (count) {
+      count.textContent = `${assetCount} of ${MEDIA_READINESS_RECOMMENDED_MINIMUM} recommended media items`;
+    }
+    if (next) {
+      next.textContent = readiness.next;
+    }
+    if (progress) {
+      progress.style.width = `${readiness.progress}%`;
+      progress.setAttribute("aria-label", `${readiness.progress}% toward recommended media threshold`);
     }
   }
 
@@ -3964,7 +4158,7 @@
         if (Number.isNaN(due.getTime()) || dateRange === "all") return true;
         if (dateRange === "today") return due >= todayStart && due <= todayEnd;
         if (dateRange === "next_7_days") return due >= todayStart && due <= nextSeven;
-        if (dateRange === "overdue") return due < now && !["mock_published", "manually_exported", "canceled", "skipped"].includes(item.queueStatus);
+        if (dateRange === "overdue") return due < now && !["mock_published", "manually_exported", "platform_published", "canceled", "skipped"].includes(item.queueStatus);
         return true;
       })
       .filter((item) => {
@@ -4129,8 +4323,15 @@
   function updateQueueActionButtons(item) {
     const mockButton = getElement("queue-mock-publish");
     const manualButton = getElement("queue-manual-export");
+    const facebookButton = getElement("queue-facebook-publish");
     const cancelButton = getElement("queue-cancel");
-    const processed = ["mock_published", "manually_exported", "canceled", "skipped"].includes(item.queueStatus);
+    const processed = ["mock_published", "manually_exported", "platform_published", "canceled", "skipped"].includes(item.queueStatus);
+    const bridge = activeApiBridge();
+    const facebookCandidate =
+      item.platform === "facebook" &&
+      item.queueStatus === "ready" &&
+      ["passed", "warnings"].includes(item.preflightStatus) &&
+      item.realPublishingEligible;
     if (mockButton) {
       mockButton.disabled = processed || !item.mockPublishEnabled || item.preflightStatus !== "passed" || item.queueStatus !== "ready";
       mockButton.title = mockButton.disabled
@@ -4139,6 +4340,14 @@
     }
     if (manualButton) {
       manualButton.disabled = processed;
+    }
+    if (facebookButton) {
+      facebookButton.disabled = processed || !facebookCandidate || !bridge;
+      facebookButton.title = !bridge
+        ? "Real Facebook publishing requires the local API bridge."
+        : facebookButton.disabled
+          ? "Facebook publishing requires a ready Facebook queue item with eligible account/preflight status."
+          : `Type ${FACEBOOK_PUBLISH_CONFIRMATION} to publish through the guarded local API.`;
     }
     if (cancelButton) {
       cancelButton.disabled = processed;
@@ -4175,7 +4384,7 @@
     content.hidden = false;
     getElement("queue-detail-status").textContent = formatStatus(item.queueStatus);
     getElement("queue-detail-summary").textContent =
-      metadata.hook || metadata.headline || "Manual export is the safe path. Future real publishing remains disabled.";
+      metadata.hook || metadata.headline || "Manual Export is the default safe path. Facebook real publishing is guarded.";
     getElement("queue-detail-platform").textContent = item.platform;
     getElement("queue-detail-due").textContent = formatDateTime(item.dueAt);
     getElement("queue-detail-timezone").textContent = item.timezone || "-";
@@ -4184,7 +4393,9 @@
     getElement("queue-detail-account-name").textContent = account.matchedAccountDisplayName || "No matching connected account";
     getElement("queue-detail-account-scopes").textContent = missingScopes.length ? missingScopes.join(", ") : "No missing scopes recorded";
     getElement("queue-detail-manual-export").textContent = manualExportEligible ? "Available when preflight has no blocking errors" : "Blocked by preflight or canceled state";
-    getElement("queue-detail-real-publishing").textContent = item.realPublishingEligible ? "Eligible for future real publishing" : "Real publishing disabled in this build";
+    getElement("queue-detail-real-publishing").textContent = item.realPublishingEligible
+      ? `Facebook can publish only after local API gates pass and you type ${FACEBOOK_PUBLISH_CONFIRMATION}`
+      : "Real publishing is locked unless Facebook flags, account scopes, preflight, and confirmation pass.";
     getElement("queue-detail-mock-publish").textContent = mockPublishEligible ? "Mock/demo eligible when queue is ready" : "Not mock-ready";
     getElement("queue-detail-scheduled").textContent = post ? `${post.id} (${formatStatus(post.status)})` : "Missing scheduled post";
     getElement("queue-detail-draft").textContent = item.generatedPostId || "-";
@@ -4410,7 +4621,7 @@
           throw new Error(result.message || "Mock connection could not be created.");
         }
         await bridge.sync();
-        setConnectedMessage("success", `${config.label} mock connection saved to local SQLite. Real publishing remains disabled.`);
+        setConnectedMessage("success", `${config.label} mock connection saved to local SQLite. Real publishing stays locked by default.`);
         renderConnectedAccounts();
       } catch (error) {
         setConnectedMessage("error", error.message || "Mock connection could not be created.");
@@ -4446,7 +4657,7 @@
       accountId: account.id,
       storageMode: "placeholder_not_stored",
     });
-    setConnectedMessage("success", `${config.label} mock connection saved locally. Real publishing remains disabled.`);
+    setConnectedMessage("success", `${config.label} mock connection saved locally. Real publishing stays locked by default.`);
     renderConnectedAccounts();
   }
 
@@ -4943,7 +5154,7 @@
   function runQueuePreflight(item) {
     const post = scheduledPostForQueueItem(item);
     const errors = [];
-    const warnings = ["manual_export_only: Manual export is the safe path; future real publishing remains disabled."];
+    const warnings = ["manual_export_only: Manual export is the default safe path; Facebook real publishing requires explicit guarded flags."];
     const settings = settingsAdapter.load();
     if (settings.emergencyPauseEnabled) {
       errors.push("emergency_pause_enabled: Emergency pause blocks queue readiness and mock publishing.");
@@ -5147,7 +5358,7 @@
     if (!item) {
       return;
     }
-    if (["mock_published", "manually_exported", "canceled", "skipped"].includes(item.queueStatus)) {
+    if (["mock_published", "manually_exported", "platform_published", "canceled", "skipped"].includes(item.queueStatus)) {
       setQueueMessage("error", "This queue item is already processed or canceled.");
       return;
     }
@@ -5228,6 +5439,55 @@
     });
     setQueueMessage("success", "Mock publish recorded locally. No external API was called.");
     renderPublishQueue();
+  }
+
+  async function publishSelectedQueueItemToFacebook() {
+    const item = selectedQueueItem();
+    if (!item) {
+      return;
+    }
+    if (item.platform !== "facebook") {
+      setQueueMessage("error", "Real publishing is only implemented for Facebook in this guarded build.");
+      return;
+    }
+    if (settingsAdapter.load().emergencyPauseEnabled) {
+      setQueueMessage("error", "Emergency pause blocks real Facebook publishing.");
+      return;
+    }
+    if (item.queueStatus !== "ready" || !["passed", "warnings"].includes(item.preflightStatus)) {
+      setQueueMessage("error", "Facebook publishing requires ready queue status and passed/warning preflight.");
+      return;
+    }
+    if (!item.realPublishingEligible) {
+      setQueueMessage("error", "Facebook publishing is not eligible yet. Check account scopes, preflight, and real publishing flags.");
+      return;
+    }
+    const bridge = activeApiBridge();
+    if (!bridge) {
+      setQueueMessage("error", "Start the local API bridge before using guarded Facebook publishing.");
+      return;
+    }
+    const phrase = window.prompt(
+      `This can create a real Facebook Page post. Type ${FACEBOOK_PUBLISH_CONFIRMATION} to continue.`,
+    );
+    if (phrase !== FACEBOOK_PUBLISH_CONFIRMATION) {
+      setQueueMessage("error", `Confirmation required. Type ${FACEBOOK_PUBLISH_CONFIRMATION} exactly.`);
+      return;
+    }
+    try {
+      const result = await bridge.request(`/api/publish-queue/${encodeURIComponent(item.id)}/publish-facebook`, {
+        method: "POST",
+        body: { confirmationPhrase: phrase },
+      });
+      await bridge.sync();
+      setQueueMessage(
+        "success",
+        `Facebook publish recorded through guarded local API.${result?.externalPostId ? ` External post ID: ${result.externalPostId}` : ""}`,
+      );
+      renderPublishQueue();
+    } catch (error) {
+      setQueueMessage("error", error.message || "Guarded Facebook publishing failed before a post was created.");
+    }
   }
 
   async function cancelSelectedQueueItem() {
@@ -5948,6 +6208,7 @@
     });
     getElement("queue-manual-export").addEventListener("click", markSelectedQueueManualExported);
     getElement("queue-mock-publish").addEventListener("click", mockPublishSelectedQueueItem);
+    getElement("queue-facebook-publish").addEventListener("click", publishSelectedQueueItemToFacebook);
     getElement("queue-cancel").addEventListener("click", cancelSelectedQueueItem);
     getElement("queue-copy-caption").addEventListener("click", copySelectedQueueCaption);
     getElement("queue-export-package").addEventListener("click", exportSelectedQueuePackage);
@@ -6239,6 +6500,7 @@
     const form = getElement("settings-form");
     const resetButton = getElement("reset-settings");
     const pauseToggle = getElement("emergencyPauseEnabled");
+    const themeSelect = getElement("themeColorScheme");
 
     if (!form) {
       return;
@@ -6248,6 +6510,11 @@
 
     pauseToggle.addEventListener("change", (event) => {
       updatePauseDisplay(event.target.checked);
+    });
+
+    themeSelect.addEventListener("change", (event) => {
+      applyThemeColorScheme(event.target.value);
+      renderThemeColorSchemePreview(event.target.value);
     });
 
     form.addEventListener("submit", async (event) => {

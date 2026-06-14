@@ -3,13 +3,17 @@
 `ContentGenerationService` is the orchestration layer that turns a
 `ContentGenerationInput` into a validated `GeneratedContentBundle`. It
 wires the brand profile, media metadata, active local AI memory, prompt
-registry, AI provider, and local safety review into one call. Mock is the default provider so
-the service runs end-to-end without any API keys.
+registry, AI provider, and local safety review into one call. Mock is the
+default provider so the service runs end-to-end without any API keys. The
+localhost bridge can also use a local Ollama-compatible runtime when the user
+explicitly selects `local` and enables `ENABLE_LOCAL_AI_CALLS=true`.
 
 The generation service:
 
 - does not persist drafts
-- does not call the network
+- does not call external/social APIs
+- calls a local Ollama-compatible runtime only when the local provider is
+  explicitly selected and enabled
 - does not depend on UI components
 - is safe to invoke from tests or from the localhost API bridge
 
@@ -59,9 +63,9 @@ per saved draft.
    deterministic without it) but its length, template id, and version
    are recorded in `bundle.prompt_metadata` for traceability.
 7. **Call provider.** `get_provider(options.provider_name)` returns the
-   adapter. Mock is default; real adapters raise
-   `ProviderDisabledError` until enabled in a later batch, which the
-   service surfaces as `ContentGenerationError`.
+   adapter. Mock is default. Local Ollama generation can run when explicitly
+   enabled. Cloud adapters still raise `ProviderDisabledError` until a later
+   provider-specific task implements them safely.
 8. **Schema validation.** `GeneratedContentBundle.__post_init__`
    validates structure as soon as the provider returns.
 9. **Safety review.** `run_safety_checks(caption, brand_profile,
@@ -209,8 +213,9 @@ this save step.
 
 ## Safety, secrets, and persistence
 
-- Mock provider is the default. Real providers stay disabled until
-  the env gates from `docs/ai-providers.md` are flipped on.
+- Mock provider is the default. Local Ollama can be enabled with the env gates
+  from `docs/ai-providers.md`. Cloud providers stay disabled until a future
+  explicit implementation.
 - The generation service does not write to `generated_posts`; draft
   persistence is a separate explicit user action through
   `scripts/db/drafts.py`.

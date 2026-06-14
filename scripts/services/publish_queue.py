@@ -14,7 +14,13 @@ from scripts.db.settings import load_app_settings
 
 
 READY_PREFLIGHT_STATUSES = {"passed", "warnings"}
-FINAL_QUEUE_STATUSES = {"mock_published", "manually_exported", "canceled", "skipped"}
+FINAL_QUEUE_STATUSES = {
+    "mock_published",
+    "manually_exported",
+    "platform_published",
+    "canceled",
+    "skipped",
+}
 
 
 class PublishQueueError(ValueError):
@@ -58,7 +64,7 @@ class PublishQueueService:
                 "Canceled or skipped queue items cannot be marked manually exported.",
                 ["queue_not_exportable"],
             )
-        if queue_row["queue_status"] in {"mock_published", "manually_exported"}:
+        if queue_row["queue_status"] in {"mock_published", "manually_exported", "platform_published"}:
             raise PublishQueueError(
                 "Queue item has already been completed.",
                 ["queue_already_completed"],

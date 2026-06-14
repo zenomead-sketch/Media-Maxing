@@ -17,6 +17,7 @@ PUBLISH_QUEUE_STATUSES = (
     "processing",
     "mock_published",
     "manually_exported",
+    "platform_published",
     "failed",
     "canceled",
     "skipped",

@@ -59,6 +59,7 @@ class WebPublishQueueScreenTest(unittest.TestCase):
             "queue-run-preflight",
             "queue-manual-export",
             "queue-mock-publish",
+            "queue-facebook-publish",
             "queue-cancel",
             "queue-open-calendar",
             "queue-open-draft",
@@ -75,6 +76,8 @@ class WebPublishQueueScreenTest(unittest.TestCase):
         self.assertIn("Publish Queue", self.html)
         self.assertIn("Local queue only", self.html)
         self.assertIn("Real publishing disabled", self.html)
+        self.assertIn("Publish to Facebook (real)", self.html)
+        self.assertIn("PUBLISH TO FACEBOOK", self.html)
         self.assertIn("Mock publish is demo-only", self.html)
         self.assertIn("manual export", self.html.lower())
         self.assertIn("account connection status", self.html.lower())
@@ -87,6 +90,7 @@ class WebPublishQueueScreenTest(unittest.TestCase):
             "runSelectedQueuePreflight",
             "markSelectedQueueManualExported",
             "mockPublishSelectedQueueItem",
+            "publishSelectedQueueItemToFacebook",
             "cancelSelectedQueueItem",
             "copySelectedQueueCaption",
             "exportSelectedQueuePackage",
@@ -103,10 +107,13 @@ class WebPublishQueueScreenTest(unittest.TestCase):
     def test_publish_queue_mock_and_manual_actions_are_local_only(self):
         self.assertIn("Mock publish recorded locally. No external API was called.", self.script)
         self.assertIn("Manual export recorded locally. No external API was called.", self.script)
+        self.assertIn("FACEBOOK_PUBLISH_CONFIRMATION", self.script)
+        self.assertIn("publish-facebook", self.script)
+        self.assertIn("Real publishing is only implemented for Facebook", self.script)
         self.assertIn("preflightStatus !== \"passed\"", self.script)
         self.assertIn("queueStatus !== \"ready\"", self.script)
         self.assertIn("mockPublishEnabled", self.script)
-        self.assertIn("future real publishing remains disabled", self.script.lower())
+        self.assertIn("facebook real publishing uses a separate guarded api path", self.script.lower())
         self.assertIn("manualExportEligible", self.script)
         self.assertIn("realPublishingEligible", self.script)
         self.assertIn("mockPublishEligible", self.script)
@@ -121,6 +128,7 @@ class WebPublishQueueScreenTest(unittest.TestCase):
             ".queue-detail-panel",
             ".queue-detail-grid",
             ".queue-action-panel",
+            ".danger-button",
             ".attempt-history-list",
             ".preflight-list",
         ):

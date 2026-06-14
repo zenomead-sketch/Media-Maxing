@@ -4,6 +4,8 @@ Real publishing should be implemented one platform at a time. Do not build broad
 
 This plan must preserve the local-first product model: local data, local approval, clear Manual Export fallback, and no hidden automation.
 
+Current status: a guarded Facebook Page text-post path exists for personal local testing. It is disabled by default, requires explicit environment flags, a ready queue item, preflight, a connected Page token, emergency pause off, and typed confirmation. Image/video publishing, other platforms, autonomous posting, and real replies remain future work.
+
 ## Recommended starting point
 
 Start with Meta only after real OAuth and account discovery are stable, or continue validating Manual Export until OAuth and platform requirements are fully understood.

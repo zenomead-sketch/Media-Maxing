@@ -33,7 +33,7 @@ class WebSafetyCenterScreenTest(unittest.TestCase):
 
         for copy in (
             "Emergency pause",
-            "Real publishing remains disabled",
+            "Real publishing is locked by default",
             "Replies are not sent automatically",
             "Dangerous actions require confirmation",
             "What pause blocks",

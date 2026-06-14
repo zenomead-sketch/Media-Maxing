@@ -34,6 +34,7 @@ class AppSettingsTest(unittest.TestCase):
             self.assertTrue(settings.requireApprovalBeforeReplying)
             self.assertFalse(settings.emergencyPauseEnabled)
             self.assertEqual(settings.aiProviderPreference, "mock")
+            self.assertEqual(settings.themeColorScheme, "classic_blue")
             self.assertIsNotNone(settings.createdAt)
             self.assertIsNotNone(settings.updatedAt)
 
@@ -55,6 +56,7 @@ class AppSettingsTest(unittest.TestCase):
                     "requireApprovalBeforeReplying": False,
                     "emergencyPauseEnabled": True,
                     "aiProviderPreference": "local",
+                    "themeColorScheme": "forest_green",
                 },
             )
             loaded = load_app_settings(db_path)
@@ -67,6 +69,7 @@ class AppSettingsTest(unittest.TestCase):
             self.assertFalse(loaded.requireApprovalBeforeReplying)
             self.assertTrue(loaded.emergencyPauseEnabled)
             self.assertEqual(loaded.aiProviderPreference, "local")
+            self.assertEqual(loaded.themeColorScheme, "forest_green")
 
     def test_update_app_settings_rejects_invalid_automation_level(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -79,6 +82,19 @@ class AppSettingsTest(unittest.TestCase):
 
             self.assertIn("automationLevel", str(error.exception))
             self.assertIn("auto_everything", str(error.exception))
+            after = load_app_settings(db_path)
+            self.assertEqual(after, before)
+
+    def test_update_app_settings_rejects_invalid_theme_color_scheme(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "app.sqlite"
+            initialize_database(db_path)
+            before = load_app_settings(db_path)
+
+            with self.assertRaises(SettingsValidationError) as error:
+                update_app_settings(db_path, {"themeColorScheme": "neon_secret_mode"})
+
+            self.assertIn("themeColorScheme", str(error.exception))
             after = load_app_settings(db_path)
             self.assertEqual(after, before)
 

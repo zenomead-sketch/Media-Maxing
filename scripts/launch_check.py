@@ -338,7 +338,9 @@ def _check_safety_workflow(db_path: Path) -> LaunchCheck:
         if audit_count < 2:
             failures.append("Expected safety audit log entries for pause enable/disable.")
         details.append(f"safety_audit_logs={audit_count}")
-        details.append("real publishing remains disabled; replies are not sent automatically")
+        details.append(
+            "broad real publishing remains locked by default; Facebook text publishing requires guarded setup and confirmation; replies are not sent automatically"
+        )
     except Exception as exc:  # pragma: no cover - defensive launch reporting
         failures.append(f"{type(exc).__name__}: {exc}")
 
@@ -346,7 +348,7 @@ def _check_safety_workflow(db_path: Path) -> LaunchCheck:
         id="safety_workflow",
         label="Safety workflow",
         status="fail" if failures else "pass",
-        summary="Emergency pause and audit smoke passed; real publishing remains disabled."
+        summary="Emergency pause and audit smoke passed; broad real publishing remains locked by default."
         if not failures
         else "Safety workflow smoke found blockers.",
         details=details + failures,

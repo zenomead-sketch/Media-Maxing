@@ -30,7 +30,7 @@ EXPORT_FILE_ORDER = [
     "posting-instructions.md",
 ]
 
-BLOCKED_QUEUE_STATUSES = {"canceled", "processing", "skipped"}
+BLOCKED_QUEUE_STATUSES = {"canceled", "processing", "skipped", "platform_published"}
 FAILED_PREFLIGHT_STATUSES = {"errors", "blocked", "failed"}
 PASSING_PREFLIGHT_STATUSES = {"passed", "warnings", "warning"}
 SECRET_MARKERS = {

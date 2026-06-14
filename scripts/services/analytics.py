@@ -973,7 +973,7 @@ class AnalyticsService:
                 FROM publish_queue_items
                 JOIN generated_posts
                   ON generated_posts.id = publish_queue_items.generated_post_id
-                WHERE publish_queue_items.queue_status IN ('mock_published', 'manually_exported')
+                WHERE publish_queue_items.queue_status IN ('mock_published', 'manually_exported', 'platform_published')
                   AND NOT EXISTS (
                     SELECT 1
                     FROM published_posts

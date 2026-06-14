@@ -25,6 +25,18 @@ AUTOMATION_LEVELS = {
 }
 PLATFORM_IDS = {"facebook", "instagram", "threads", "youtube", "tiktok", "linkedin", "x"}
 AI_PROVIDER_PREFERENCES = {"mock", "openai", "anthropic", "local"}
+THEME_COLOR_SCHEMES = {
+    "classic_blue",
+    "forest_green",
+    "sunrise_coral",
+    "slate_violet",
+    "teal_mint",
+    "graphite_gold",
+    "rose_plum",
+    "sky_indigo",
+    "olive_sage",
+    "espresso_sand",
+}
 UPDATABLE_FIELDS = {
     "appName",
     "appEnvironment",
@@ -36,6 +48,7 @@ UPDATABLE_FIELDS = {
     "requireApprovalBeforeReplying",
     "emergencyPauseEnabled",
     "aiProviderPreference",
+    "themeColorScheme",
 }
 
 
@@ -55,6 +68,7 @@ class AppSettings:
     requireApprovalBeforeReplying: bool
     emergencyPauseEnabled: bool
     aiProviderPreference: str
+    themeColorScheme: str
     createdAt: str
     updatedAt: str
 
@@ -67,6 +81,7 @@ def _default_settings_json() -> dict[str, Any]:
         "defaultTimezone": "America/New_York",
         "defaultPlatformTargets": ["facebook", "instagram"],
         "aiProviderPreference": "mock",
+        "themeColorScheme": "classic_blue",
     }
 
 
@@ -146,6 +161,7 @@ def _validate_settings(updates: dict[str, Any], merged_json: dict[str, Any]) -> 
         "localDataDirectory",
         "defaultTimezone",
         "aiProviderPreference",
+        "themeColorScheme",
     ):
         merged_json[field_name] = _require_non_empty_string(
             field_name,
@@ -156,6 +172,12 @@ def _validate_settings(updates: dict[str, Any], merged_json: dict[str, Any]) -> 
         raise SettingsValidationError(
             "aiProviderPreference must be one of: "
             f"{', '.join(sorted(AI_PROVIDER_PREFERENCES))}."
+        )
+
+    if merged_json["themeColorScheme"] not in THEME_COLOR_SCHEMES:
+        raise SettingsValidationError(
+            "themeColorScheme must be one of: "
+            f"{', '.join(sorted(THEME_COLOR_SCHEMES))}."
         )
 
     platform_targets = merged_json["defaultPlatformTargets"]
@@ -202,6 +224,7 @@ def _row_to_settings(row: sqlite3.Row) -> AppSettings:
         requireApprovalBeforeReplying=bool(row["require_approval_before_replying"]),
         emergencyPauseEnabled=bool(row["emergency_pause_enabled"]),
         aiProviderPreference=str(extra_settings["aiProviderPreference"]),
+        themeColorScheme=str(extra_settings["themeColorScheme"]),
         createdAt=row["created_at"],
         updatedAt=row["updated_at"],
     )
@@ -236,6 +259,7 @@ def update_app_settings(
         "defaultTimezone": current.defaultTimezone,
         "defaultPlatformTargets": current.defaultPlatformTargets,
         "aiProviderPreference": current.aiProviderPreference,
+        "themeColorScheme": current.themeColorScheme,
     }
 
     for key in list(merged_json):

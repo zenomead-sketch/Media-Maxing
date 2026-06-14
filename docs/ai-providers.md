@@ -1,15 +1,15 @@
 # AI Providers
 
-This document describes the AI provider abstraction added in Batch 3,
-Step 1. Only the mock provider runs end-to-end. Real provider adapters
-are scaffolded but stay disabled by policy until a future batch adds
-them with safety gates, tests, and documentation.
+This document describes the AI provider abstraction. Mock provider is the
+default safe path. The local provider can call an Ollama-compatible runtime on
+the same machine when explicitly enabled. Cloud providers remain scaffolded and
+disabled until they are implemented behind their own safety gates.
 
 ## Goals
 
 - One stable interface for every AI provider.
 - Mock provider is the default for development and tests.
-- Real providers fail safely if any safety gate is off or any required
+- Providers fail safely if any safety gate is off or any required
   configuration is missing.
 - No SDK is imported at module load time, so missing optional packages
   cannot break tests.
@@ -26,7 +26,7 @@ them with safety gates, tests, and documentation.
 - `scripts/ai/providers/mock.py` — `MockProvider`, deterministic.
 - `scripts/ai/providers/openai.py` — OpenAI stub.
 - `scripts/ai/providers/anthropic.py` — Anthropic stub.
-- `scripts/ai/providers/local.py` — Local AI runtime stub.
+- `scripts/ai/providers/local.py` — Local Ollama-compatible runtime adapter.
 - `scripts/ai/providers/registry.py` — `get_provider`,
   `list_available_providers`.
 
@@ -140,11 +140,44 @@ updating both files in lockstep.
 The mock provider raises `SchemaValidationError` for invalid inputs and
 never raises `ProviderDisabledError`.
 
-## Real Provider Stubs
+## Local Ollama Provider
 
-`OpenAIProvider`, `AnthropicProvider`, and `LocalProvider` are all
-scaffolds. They share `RealProviderStub`, which reads three gates from
-the environment in this order:
+`LocalProvider` uses Ollama's local `/api/generate` endpoint by default. It is
+designed for fully local generation on the user's machine, with the app still
+owning structure, validation, safety review, approval status, and persistence.
+
+The local provider is disabled unless all of these are true:
+
+- Settings or `.env` select `local` as the AI provider.
+- `ENABLE_LOCAL_AI_CALLS=true`.
+- `LOCAL_AI_BASE_URL` points to `localhost`, `127.0.0.1`, or `::1` by default.
+- `LOCAL_AI_MODEL` names a model already pulled into Ollama.
+- Tests still block live network unless `ALLOW_NETWORK_IN_TESTS=true`.
+
+Recommended local `.env` values:
+
+```text
+AI_PROVIDER_PREFERENCE=local
+ENABLE_LOCAL_AI_CALLS=true
+LOCAL_AI_BASE_URL=http://127.0.0.1:11434
+LOCAL_AI_MODEL=llama3.1:8b
+LOCAL_AI_TIMEOUT_SECONDS=60
+```
+
+The user must install Ollama separately and pull the selected model before
+using this mode. Example:
+
+```text
+ollama pull llama3.1:8b
+```
+
+The adapter sends only the generation prompt to the local runtime. It does not
+publish posts, schedule posts, send replies, or call social platforms.
+
+## Cloud Provider Stubs
+
+`OpenAIProvider` and `AnthropicProvider` remain scaffolds. They share
+`RealProviderStub`, which reads these gates:
 
 1. `INTEGRATIONS_MODE` must be a non-mock value.
 2. `ENABLE_REAL_NETWORK_CALLS` must be truthy
@@ -152,24 +185,15 @@ the environment in this order:
 3. The provider's required key must be present and non-empty:
    - OpenAI: `OPENAI_API_KEY`
    - Anthropic: `ANTHROPIC_API_KEY`
-   - Local: `LOCAL_AI_BASE_URL` (URL of a local runtime such as
-     Ollama, LM Studio, llama.cpp, etc.)
 
-If any gate fails, `generate_bundle` raises `ProviderDisabledError`
-with the reason. If every gate passes, `generate_bundle` still raises
-`ProviderDisabledError` with a "not yet implemented" message, because
-Batch 3 keeps real provider calls off by policy.
+If any gate fails, `generate_bundle` raises `ProviderDisabledError` with the
+reason. If every gate passes, these cloud providers still raise
+`ProviderDisabledError` with a "not yet implemented" message. This keeps
+external AI costs and data-sharing off until a future explicit cloud-provider
+task implements them safely.
 
-Constructors never raise. This lets the Settings UI safely list every
-provider with a reason explaining why it is currently unavailable.
-
-`LOCAL_AI_BASE_URL` is not present in the committed `.env.example`
-template yet. Add it to your local `.env` if you plan to experiment
-with a local runtime in a future batch:
-
-```text
-LOCAL_AI_BASE_URL=http://localhost:11434
-```
+Constructors never raise. This lets the Settings UI safely list every provider
+with a reason explaining why it is currently unavailable.
 
 ## Registry
 
@@ -215,24 +239,34 @@ Safety rules baked into the config:
 - Unknown provider names are normalized to ``mock`` rather than raising
   so the app stays usable on typos.
 
-### Switching providers later
+### Switching providers
+
+For local Ollama:
+
+1. Install/start Ollama.
+2. Pull the model named by `LOCAL_AI_MODEL`.
+3. Set `ENABLE_LOCAL_AI_CALLS=true`.
+4. Choose `Local AI runtime, Ollama` in Settings, or set
+   `AI_PROVIDER_PREFERENCE=local`.
+5. Generate drafts through the localhost app bridge.
+
+For future cloud providers:
 
 1. Add or update keys in your local ``.env``
-   (``OPENAI_API_KEY``, ``ANTHROPIC_API_KEY``, ``LOCAL_AI_BASE_URL``).
-2. Set ``INTEGRATIONS_MODE`` to a non-``mock`` value and
-   ``ENABLE_REAL_NETWORK_CALLS=true``.
+   (``OPENAI_API_KEY``, ``ANTHROPIC_API_KEY``).
+2. Set cloud/network gates only when the provider adapter is implemented.
 3. Change ``aiProviderPreference`` in app settings or set
    ``AI_PROVIDER_PREFERENCE=openai`` (etc.) in your environment.
 4. The next call to ``provider_from_config(AIProviderConfig.from_environment(...))``
-   will return the matching adapter. In Batch 3 those adapters still
-   raise ``ProviderDisabledError("...not yet implemented...")`` by
-   policy; a later batch implements the real calls.
+   will return the matching adapter.
 
 ## Safety Notes
 
 - Mock provider is the default for development and tests.
-- Real provider adapters never import vendor SDKs at module load.
-- Test suite asserts that the mock provider does not open a socket.
+- Local provider calls only localhost by default and is disabled unless
+  `ENABLE_LOCAL_AI_CALLS=true`.
+- Cloud provider adapters never import vendor SDKs at module load.
+- Test suite mocks Ollama responses and does not call real external APIs by default.
 - Provider metadata is safe to expose to the UI. It does not contain
   tokens, raw responses, or other secrets.
 - The Settings UI must call `list_available_providers` rather than

@@ -40,6 +40,12 @@ class WebMediaLibraryScreenTest(unittest.TestCase):
             "media-error-state",
             "media-empty-state",
             "media-count",
+            "media-readiness-panel",
+            "media-readiness-tier",
+            "media-readiness-summary",
+            "media-readiness-progress",
+            "media-readiness-count",
+            "media-readiness-next",
         ]
 
         for element_id in required_ids:
@@ -53,6 +59,11 @@ class WebMediaLibraryScreenTest(unittest.TestCase):
         self.assertIn("defaultMediaAssets", script)
         self.assertIn("setupMediaLibrary", script)
         self.assertIn("renderMediaLibrary", script)
+        self.assertIn("mediaReadinessForCount", script)
+        self.assertIn("MEDIA_READINESS_RECOMMENDED_MINIMUM = 20", script)
+        self.assertIn("Ready for good generation", script)
+        self.assertIn("Starter mode", script)
+        self.assertIn("Excellent content memory", script)
         self.assertIn("filterMediaAssets", script)
         self.assertIn("openMediaDetailPanel", script)
         self.assertIn("saveMediaMetadata", script)

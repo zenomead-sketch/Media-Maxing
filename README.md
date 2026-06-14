@@ -8,9 +8,32 @@ This project has a local-first MVP foundation with a static web shell, SQLite
 services, and a localhost bridge. It does not publish real posts, send real
 replies, or connect real platform APIs by default.
 
-Real publishing remains disabled.
+Real publishing remains disabled by default. A guarded Facebook Page text-post path exists for personal local testing only when explicit flags, Page permissions, preflight, and typed confirmation all pass.
 
 ## Quick Start
+
+For the easiest local beta path on Windows, double-click:
+
+```text
+start-media-maxing.bat
+```
+
+Or run the same launcher from a terminal:
+
+```text
+python -m scripts.local_beta_launcher
+```
+
+This starts the local API and web app together and opens Control Center at
+`http://127.0.0.1:8044/#home`. Real replies and most social APIs stay disabled; Facebook real text publishing stays locked unless you explicitly enable the guarded flags described in `docs/facebook-real-use.md`.
+
+To practice with clearly fake demo data:
+
+```text
+python -m scripts.local_beta_launcher --seed-demo
+```
+
+Advanced/manual startup:
 
 ```text
 python -m scripts.db.init_db --database data/app.sqlite
@@ -45,12 +68,29 @@ Run the launch checks:
 
 ```text
 python -m scripts.launch_check
+python -m scripts.demo_day_check
 python -m scripts.qa.integration_security_scan .
 ```
 
 ## Mock Mode
 
 Mock mode is the default safe path. It supports mock AI generation, mock OAuth, mock analytics, mock engagement, and local-only workflow testing without API keys.
+
+## Local Or Cloud Generation
+
+Generation now has three paths:
+
+- `mock`: default, offline, deterministic, best for testing.
+- `local`: Ollama-compatible local generation on your machine. Install/start
+  Ollama separately, pull the model in `LOCAL_AI_MODEL`, set
+  `ENABLE_LOCAL_AI_CALLS=true`, and choose `Local AI runtime, Ollama` in
+  Settings.
+- `cloud`: OpenAI/Anthropic placeholders remain scaffolded for later. They are
+  not enabled by default and should only be used after explicit provider setup,
+  cost/privacy review, and tests.
+
+Real social publishing and real reply sending remain disabled regardless of
+which generator mode is selected.
 
 Manual Export is the safe posting path. It creates local posting packages and does not publish automatically.
 
@@ -72,7 +112,7 @@ Manual Export is the safe posting path. It creates local posting packages and do
 
 ## Safety statement
 
-The app is designed around approval required, local-first data, mock mode, manual export, and emergency pause. Real publishing and real reply sending require a future explicit build track with safety gates, secure tokens, platform verification, app review, preflight, audit logs, rollback handling, and tests.
+The app is designed around approval required, local-first data, mock mode, manual export, and emergency pause. Real reply sending is not implemented. Real publishing is disabled by default; the only current real publish path is guarded Facebook Page text posting for personal testing, with explicit environment flags, preflight, a connected Page, typed confirmation, audit logs, and tests.
 
 ## Final handoff docs
 
@@ -103,6 +143,7 @@ The app is designed around approval required, local-first data, mock mode, manua
 - Next build plan: `docs/next-build-plan.md`
 - Known limitations: `docs/known-limitations.md`
 - Future real publishing plan: `docs/future-real-publishing-plan.md`
+- Facebook real-use readiness: `docs/facebook-real-use.md`
 - Launch checklist: `docs/launch-candidate-checklist.md`
 
 ## Project Purpose
@@ -156,7 +197,7 @@ Local-first rules:
 - Do not scrape social platforms.
 - Do not commit local databases, real media, exports, logs, backups, tokens, or secrets.
 - Keep mock/demo mode working before adding real providers.
-- Keep manual export as the safe publishing path until real publishing is implemented behind strict safety gates.
+- Keep manual export as the default safe publishing path; any real platform action must stay behind strict safety gates.
 
 ## Current Tech Stack
 
@@ -174,7 +215,8 @@ Possible later direction from `AGENTS.md`:
 - Database: SQLite for MVP.
 - ORM: Prisma or Drizzle for TypeScript, or SQLAlchemy/SQLModel for Python.
 - Media storage: local filesystem under `data/`.
-- AI: mock provider by default, with OpenAI, Anthropic, and local providers planned later.
+- AI: mock provider by default, Ollama-compatible local generation behind
+  explicit local flags, and OpenAI/Anthropic cloud provider scaffolds for later.
 - Jobs: lightweight local job runner first.
 - OAuth: server-side only when future integrations are added.
 - Token storage: secure local storage/keychain/encryption when available; otherwise `placeholder_not_stored`.
@@ -234,8 +276,8 @@ For now:
 2. Copy `.env.example` to `.env` when local server-side configuration is needed.
 3. Do not add real secrets to committed files.
 4. Follow the batch prompts in order.
-5. Run `python -m apps.api.local_server --database data/app.sqlite --port 8000`.
-6. Open `http://127.0.0.1:8000` for the SQLite-backed web shell.
+5. Run `python -m scripts.local_beta_launcher` for the daily local beta path.
+6. Open Control Center at `http://127.0.0.1:8044/#home`.
 7. On a fresh database, start with the Onboarding screen and setup checklist.
 
 The localhost server automatically loads a repo-root `.env` file when it
@@ -268,6 +310,8 @@ No package manager commands exist yet because there is no `package.json`, `pypro
 Current direct commands:
 
 ```text
+python -m scripts.local_beta_launcher
+python -m scripts.local_beta_launcher --seed-demo
 python -m scripts.db.init_db --database data/app.sqlite
 python -m scripts.db.seed_demo --database data/app.sqlite
 python -m apps.api.local_server --database data/app.sqlite --port 8000
@@ -281,6 +325,8 @@ python -m scripts.services.ai_memory --database data/app.sqlite --brand-profile-
 python -m scripts.services.weekly_reports --database data/app.sqlite --brand-profile-id demo-brand-brightside-exterior-care --week-start-date 2026-06-08
 python -m scripts.services.ai_learning --database data/app.sqlite --brand-profile-id demo-brand-brightside-exterior-care --week-start-date 2026-06-08
 python -m scripts.services.diagnostics --database data/app.sqlite --export
+python -m scripts.demo_day_check
+python -m scripts.launch_check
 python -m scripts.desktop.launcher --check
 python -m scripts.desktop.launcher --dev
 python -m unittest tests.test_integration_flags
@@ -327,6 +373,12 @@ DATABASE_URL=file:./data/app.sqlite
 OPENAI_API_KEY=
 ANTHROPIC_API_KEY=
 
+AI_PROVIDER_PREFERENCE=mock
+ENABLE_LOCAL_AI_CALLS=false
+LOCAL_AI_BASE_URL=http://127.0.0.1:11434
+LOCAL_AI_MODEL=llama3.1:8b
+LOCAL_AI_TIMEOUT_SECONDS=60
+
 INTEGRATIONS_MODE=mock
 ENABLE_REAL_NETWORK_CALLS=false
 ENABLE_REAL_OAUTH=false
@@ -372,7 +424,7 @@ Real provider keys and platform credentials are optional future configuration va
 
 Non-negotiable safety rules:
 
-- No real publishing yet.
+- No broad real publishing yet. Only guarded Facebook Page text posting is available for personal local testing after explicit setup.
 - No real comment replies or DMs yet.
 - No auto-replies.
 - No scraping.
@@ -414,7 +466,7 @@ Current status:
 - Local Publish Queue action service exists for marking manually exported and mock-publish transitions.
 - Social connector registry, mock OAuth scaffolding, Connected Accounts UI, token safety helpers, Meta connector scaffolds, account-aware preflight, and Social Integration Setup helper exist.
 - Integration feature flag validation and a safe server-only platform HTTP client foundation exist for future OAuth/provider work.
-- Guarded Meta OAuth token exchange readiness exists behind explicit safety flags and mocked-test coverage; mock mode remains default and real publishing remains disabled.
+- Guarded Meta OAuth token exchange readiness exists behind explicit safety flags and mocked-test coverage; mock mode remains default, and guarded Facebook Page text posting is the only real publish path.
 - Meta account discovery and connector health checks now exist as safe scaffolding with mocked-test coverage; real API discovery is not called by default.
 - YouTube connector scaffolding now supports mock OAuth/channel health readiness; video upload and publishing remain disabled.
 - TikTok connector scaffolding now supports mock OAuth/profile health readiness; video posting remains disabled.
@@ -449,6 +501,7 @@ Batch 5 setup docs:
 - `docs/oauth-flow.md`
 - `docs/token-security.md`
 - `docs/meta-integration.md`
+- `docs/facebook-real-use.md`
 - `docs/connected-accounts.md`
 - `docs/social-integration-setup.md`
 

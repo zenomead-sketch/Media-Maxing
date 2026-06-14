@@ -31,13 +31,13 @@ In mock mode:
 
 ## Real Mode
 
-Real OAuth is planned for a later batch. It must stay disabled unless a future task explicitly enables one platform with safety gates.
+Facebook real OAuth is prepared for local testing behind explicit flags. Other real OAuth paths remain scaffolded. Real publishing stays disabled unless a future task explicitly enables one platform with safety gates.
 
 Before real OAuth is used, the app must have:
 
 - Server-side OAuth handling.
 - Hashed OAuth state validation.
-- Secure token storage or an approved placeholder strategy.
+- Secure token storage or an approved placeholder strategy. The default placeholder mode refuses raw tokens, which is safest but limits follow-up provider calls.
 - Redacted logs.
 - Safe frontend account DTOs.
 - Platform-specific setup docs verified against official provider docs.
@@ -123,7 +123,7 @@ When you are ready for future real OAuth work:
 2. Copy it to `.env`.
 3. Add credentials only in `.env`.
 4. Do not edit `.env.example` with real values.
-5. Keep real OAuth and real publishing flags set to `false` unless a future prompt explicitly tells you otherwise.
+5. Keep real publishing flags set to `false`. For Facebook real OAuth testing only, enable the OAuth/network flags after reading `docs/facebook-real-use.md`.
 6. Open Social Integration Setup and check which values are still missing.
 
 Important files:
@@ -168,6 +168,7 @@ See also:
 - `docs/integration-feature-flags.md`
 - `docs/platform-http-client.md`
 - `docs/meta-oauth-real-mode.md`
+- `docs/facebook-real-use.md`
 - `docs/connector-health-checks.md`
 - `docs/youtube-integration.md`
 - `docs/tiktok-integration.md`

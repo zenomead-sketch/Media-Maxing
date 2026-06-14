@@ -88,6 +88,9 @@ class WebLaunchPolishTests(unittest.TestCase):
         self.assertIn(".status-badge", CSS)
         self.assertIn(".control-summary-grid", CSS)
         self.assertIn(".nav-group", CSS)
+        self.assertIn("table-scroll-hint", HTML)
+        self.assertIn('aria-label="Scrollable platform metrics table"', HTML)
+        self.assertIn("-webkit-overflow-scrolling: touch", CSS)
 
     def test_dangerous_actions_keep_confirmation_messages(self):
         confirmations = [

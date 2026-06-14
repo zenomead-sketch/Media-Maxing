@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass
 
 
-DEFAULT_META_GRAPH_API_VERSION = "v20.0"
+DEFAULT_META_GRAPH_API_VERSION = "v25.0"
 
 
 @dataclass(frozen=True)

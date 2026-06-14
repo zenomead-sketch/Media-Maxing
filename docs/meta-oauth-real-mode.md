@@ -16,7 +16,7 @@ META_ENABLE_REAL_OAUTH=true
 META_CLIENT_ID=
 META_CLIENT_SECRET=
 META_REDIRECT_URI=
-META_GRAPH_API_VERSION=
+META_GRAPH_API_VERSION=v25.0
 ```
 
 `META_CLIENT_SECRET` must stay server-side. Do not show it in the browser, logs, docs, fixtures, screenshots, or committed files.
@@ -39,7 +39,7 @@ The OAuth start flow:
 3. Generates a secure OAuth state value.
 4. Stores only a hash of the state in `oauth_states`.
 5. Stores requested scopes and redirect URI.
-6. Builds an authorization URL.
+6. Builds a real Meta authorization URL only when real OAuth is configured.
 7. Creates a connector audit log.
 
 The raw state value is returned only as part of the local redirect flow. The state hash is never exposed to frontend code.
@@ -80,11 +80,13 @@ In `placeholder_not_stored` mode, raw tokens are refused and token metadata is s
 
 Future secure storage may use OS keychain, encrypted files, or encrypted database storage, but that must be implemented and reviewed separately.
 
-## Account Discovery Limitations
+## Facebook Page Discovery Readiness
 
-The current token exchange can create a limited connected account when the token response does not include profile or account data.
+Facebook Page discovery is prepared around the Pages API shape where `/me/accounts` can return Page IDs, Page names, usernames, categories, tasks, and Page access tokens. Page access tokens are treated as secrets, redacted from debug output, and not exposed in frontend DTOs.
 
-Meta account discovery is scaffolded separately through connector health checks. Real discovery endpoints require future verification against current Meta API docs and app review requirements.
+Real discovery requires a usable server-side token. With the default `TOKEN_STORAGE_MODE=placeholder_not_stored`, raw tokens are refused, so real provider discovery will report that reauthorization or secure token storage is needed. Mocked provider responses are still supported for tests.
+
+If `TOKEN_STORAGE_MODE=insecure_dev_only`, the app will only use the stored token when `APP_ENV=development` and `ALLOW_INSECURE_TOKEN_STORAGE=true`. This is for local testing only and must not be used for production data.
 
 ## App Review Notes
 

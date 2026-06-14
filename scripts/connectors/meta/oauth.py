@@ -77,11 +77,18 @@ def build_meta_token_exchange_request(
 
 
 def build_meta_profile_request(*, config: MetaConfig, platform: str) -> PlatformHttpRequest:
-    # TODO: Verify exact profile/account discovery endpoints per Meta product
-    # before real discovery is enabled for operators. Tests use mocked
+    # TODO: Verify exact profile/account discovery fields per Meta product
+    # against current official docs before production use. Tests use mocked
     # responses and no real API call is made by default.
+    if platform == "facebook":
+        return PlatformHttpRequest(
+            method=PlatformHttpMethod.GET,
+            url=f"https://graph.facebook.com/{config.graphApiVersion}/me/accounts",
+            query={
+                "fields": "id,name,username,category,tasks,access_token",
+            },
+        )
     fields_by_platform = {
-        "facebook": "id,name,username",
         "instagram": "id,name,username,account_type",
         "threads": "id,name,username",
     }

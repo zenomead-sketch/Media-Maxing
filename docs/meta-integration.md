@@ -36,7 +36,7 @@ META_ENABLE_REAL_OAUTH=false
 META_ENABLE_REAL_PUBLISHING=false
 ```
 
-`META_GRAPH_API_VERSION` defaults to a placeholder version when unset. Exact API version and permissions must be verified before real OAuth is enabled.
+`META_GRAPH_API_VERSION` defaults to `v25.0` when unset. Meta versions and permission behavior change over time, so verify the current official docs before live use.
 
 The loader only exposes whether `META_CLIENT_SECRET` is configured. It should not print, log, or return the secret value.
 
@@ -56,7 +56,7 @@ Real OAuth token exchange is setup-gated:
 
 If any requirement is missing, no network call is made and the callback returns a safe setup/disabled result.
 
-When all gates pass, `OAuthFlowService` builds a Meta token request through `scripts/connectors/meta/oauth.py` and sends it through `scripts/services/platform_http_client.py`. Tests use mocked HTTP responses only.
+When all gates pass, `OAuthFlowService` builds a real Meta authorization URL during start, stores only a hash of the OAuth state, and later builds a Meta token request through `scripts/connectors/meta/oauth.py`. Token exchange goes through `scripts/services/platform_http_client.py`. Tests use mocked HTTP responses only.
 
 ## Token And Account Behavior
 
@@ -87,7 +87,7 @@ Meta connectors now expose:
 - `getAccountProfile()`
 - `validateConnection()`
 
-The current discovery path is a safe scaffold. Tests inject mocked provider responses through the server-only platform HTTP client. Real discovery is not called by default.
+The current discovery path is a safe scaffold. Facebook discovery is shaped for Page discovery through `/me/accounts` and can read a mocked response containing Page IDs, names, usernames, categories, tasks, and Page access tokens. Page access tokens are redacted and are not exposed to the UI. Tests inject mocked provider responses through the server-only platform HTTP client. Real discovery is not called by default.
 
 Health checks can return:
 
@@ -132,7 +132,7 @@ Each connector exposes setup instructions for:
 - local development notes
 - publishing-disabled safety notice
 
-Current scope names are placeholders for planning and tests. Verify exact scopes against official Meta documentation before enabling real OAuth.
+Current Facebook connection scopes are `pages_show_list`, `pages_manage_metadata`, and `pages_read_engagement`. Future real Page publishing will also need `pages_manage_posts`, but that scope should not be treated as permission to publish until a future explicit real-publishing task implements the final safety gates.
 
 ## Practical Setup Checklist
 

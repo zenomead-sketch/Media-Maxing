@@ -72,7 +72,11 @@ class MetaAccountHealthTest(unittest.TestCase):
         account_id = self._account(
             db_path,
             platform="facebook",
-            granted_scopes=["pages_show_list", "pages_read_engagement"],
+            granted_scopes=[
+                "pages_show_list",
+                "pages_manage_metadata",
+                "pages_read_engagement",
+            ],
         )
 
         def fake_profile(request, timeout):
@@ -80,11 +84,27 @@ class MetaAccountHealthTest(unittest.TestCase):
                 ok=True,
                 status=200,
                 json={
-                    "id": "fb-page-123",
-                    "name": "Demo Facebook Page",
-                    "username": "demo-page",
-                    "account_type": "page",
+                    "data": [
+                        {
+                            "id": "fb-page-123",
+                            "name": "Demo Facebook Page",
+                            "username": "demo-page",
+                            "category": "Local Service",
+                            "access_token": "page-token-must-not-leak",
+                        }
+                    ]
                 },
+                text=json.dumps(
+                    {
+                        "data": [
+                            {
+                                "id": "fb-page-123",
+                                "name": "Demo Facebook Page",
+                                "access_token": "page-token-must-not-leak",
+                            }
+                        ]
+                    }
+                ),
             )
 
         result = get_connector("facebook").validateConnection(
@@ -106,7 +126,9 @@ class MetaAccountHealthTest(unittest.TestCase):
         self.assertEqual(result.connectionStatus, "connected")
         self.assertEqual(result.displayName, "Demo Facebook Page")
         self.assertEqual(result.platformAccountId, "fb-page-123")
+        self.assertIn("facebook_page_token_redacted", " ".join(result.warnings))
         self.assertIn("name", result.rawProviderResponseRedacted)
+        self.assertNotIn("page-token-must-not-leak", result.rawProviderResponseRedacted)
 
         with closing(sqlite3.connect(db_path)) as connection:
             row = connection.execute(
@@ -184,7 +206,11 @@ class MetaAccountHealthTest(unittest.TestCase):
         account_id = self._account(
             db_path,
             platform="facebook",
-            granted_scopes=["pages_show_list", "pages_read_engagement"],
+            granted_scopes=[
+                "pages_show_list",
+                "pages_manage_metadata",
+                "pages_read_engagement",
+            ],
         )
 
         result = get_connector("facebook").validateConnection(
@@ -207,7 +233,11 @@ class MetaAccountHealthTest(unittest.TestCase):
         account_id = self._account(
             db_path,
             platform="facebook",
-            granted_scopes=["pages_show_list", "pages_read_engagement"],
+            granted_scopes=[
+                "pages_show_list",
+                "pages_manage_metadata",
+                "pages_read_engagement",
+            ],
         )
 
         def auth_error(request, timeout):
@@ -235,6 +265,34 @@ class MetaAccountHealthTest(unittest.TestCase):
         self.assertEqual(result.status, "expired")
         self.assertTrue(result.requiresReauth)
         self.assertNotIn("access_token", result.rawProviderResponseRedacted)
+
+    def test_real_facebook_discovery_without_server_token_requires_reauth(self):
+        db_path = self._database()
+        account_id = self._account(
+            db_path,
+            platform="facebook",
+            granted_scopes=[
+                "pages_show_list",
+                "pages_manage_metadata",
+                "pages_read_engagement",
+            ],
+        )
+
+        result = get_connector("facebook").validateConnection(
+            account_id,
+            database_path=db_path,
+            http_client_config=PlatformHttpClientConfig(
+                provider="meta",
+                platform="facebook",
+                safetyMode=NetworkSafetyMode.ENABLED,
+                allowNetwork=True,
+            ),
+            now="2026-05-28T12:30:00Z",
+        )
+
+        self.assertEqual(result.status, "expired")
+        self.assertTrue(result.requiresReauth)
+        self.assertIn("token_not_available", " ".join(result.errors))
 
     def test_get_account_profile_returns_safe_profile_from_mock_response(self):
         db_path = self._database()

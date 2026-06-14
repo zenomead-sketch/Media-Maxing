@@ -105,7 +105,7 @@ class LaunchCandidateCheckTests(unittest.TestCase):
         ):
             self.assertIn(heading, text)
         for phrase in (
-            "Real publishing remains disabled",
+            "Real publishing remains disabled by default",
             "Do not call real APIs",
             "Manual Export",
             "Emergency pause",

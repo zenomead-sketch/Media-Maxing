@@ -60,6 +60,10 @@
     linkedin: 3000,
     x: 280,
   };
+  const MEDIA_READINESS_STARTER_MINIMUM = 5;
+  const MEDIA_READINESS_RECOMMENDED_MINIMUM = 20;
+  const MEDIA_READINESS_STRONG_MINIMUM = 50;
+  const MEDIA_READINESS_EXCELLENT_MINIMUM = 100;
 
   function captionLimitFor(platform) {
     return PLATFORM_CAPTION_LIMITS[platform] || 2200;
@@ -123,6 +127,43 @@
   function loadMediaAssets() {
     const data = safeParse(window.localStorage.getItem(MEDIA_KEY), []);
     return Array.isArray(data) ? data : [];
+  }
+
+  function mediaReadinessForCount(count) {
+    const safeCount = Math.max(Number(count) || 0, 0);
+    if (safeCount >= MEDIA_READINESS_EXCELLENT_MINIMUM) {
+      return {
+        tier: "Excellent content memory",
+        message: "Excellent content memory. You have a deep local media library for highly specific drafts.",
+        className: "is-ready",
+      };
+    }
+    if (safeCount >= MEDIA_READINESS_STRONG_MINIMUM) {
+      return {
+        tier: "Strong media library",
+        message: "Strong media library. Generation should have plenty of real work context.",
+        className: "is-ready",
+      };
+    }
+    if (safeCount >= MEDIA_READINESS_RECOMMENDED_MINIMUM) {
+      return {
+        tier: "Ready for good generation",
+        message: "Ready for good generation. You have reached the recommended 20-item media threshold.",
+        className: "is-ready",
+      };
+    }
+    if (safeCount >= MEDIA_READINESS_STARTER_MINIMUM) {
+      return {
+        tier: "Starter mode",
+        message: `Starter mode: ${safeCount} local media items. You can generate now, but adding ${MEDIA_READINESS_RECOMMENDED_MINIMUM - safeCount} more real items will improve personalization.`,
+        className: "is-starter",
+      };
+    }
+    return {
+      tier: "Low media context",
+      message: `Low media context: ${safeCount} local media items. Add at least ${MEDIA_READINESS_STARTER_MINIMUM} for starter mode and aim for 20 real items before serious generation.`,
+      className: "is-low",
+    };
   }
 
   function loadDrafts() {
@@ -496,6 +537,7 @@
     if (!container || !empty) return [];
     container.innerHTML = "";
     const assets = loadMediaAssets();
+    renderMediaReadinessBanner(assets.length);
     if (!assets.length) {
       empty.hidden = false;
       return [];
@@ -533,6 +575,17 @@
       container.appendChild(card);
     });
     return assets;
+  }
+
+  function renderMediaReadinessBanner(assetCount) {
+    const banner = $("generate-media-readiness");
+    if (!banner) return;
+    const readiness = mediaReadinessForCount(assetCount);
+    banner.className = `media-readiness-banner ${readiness.className}`;
+    banner.innerHTML = `
+      <strong>${escapeHtml(readiness.tier)}</strong>
+      <span>${escapeHtml(readiness.message)} Generation remains available; this is guidance, not a hard block.</span>
+    `;
   }
 
   function toggleMediaCard(card) {

@@ -5,12 +5,15 @@ done through manual export.
 
 ## Daily workflow
 
-1. Open the app with `python -m apps.api.local_server --database data/app.sqlite --port 8000`.
-2. Check Safety Center for emergency pause or critical safety flags.
-3. Review Drafts that need approval.
-4. Check Calendar for upcoming scheduled posts.
-5. Check Publish Queue for blocked or ready items.
-6. Review Engagement Inbox for needs-reply, urgent, complaint, or lead items.
+1. Open the app with `start-media-maxing.bat` or `python -m scripts.local_beta_launcher`.
+2. Start in Control Center at `#home`.
+3. Follow the recommended next action.
+4. Check Needs Attention for drafts, blocked queue items, critical safety flags, or urgent engagement.
+5. Use Ready To Do for approved drafts, manual exports, and local reply approvals.
+6. Open detailed screens only when you need the full backend dashboard view.
+
+Advanced troubleshooting can still start the raw local server with
+`python -m apps.api.local_server --database data/app.sqlite --port 8000`.
 
 ## Weekly workflow
 
@@ -22,6 +25,7 @@ done through manual export.
 6. Generate weekly reports.
 7. Review AI Memory and content insights.
 8. Back up app data.
+9. Run `python -m scripts.demo_day_check` when you want a guided local QA pass.
 
 ## Monthly workflow
 

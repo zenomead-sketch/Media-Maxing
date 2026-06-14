@@ -59,7 +59,7 @@
         <div class="safety-panel">
           <p class="panel-label">Safety mode</p>
           <p class="panel-title">Approval Required</p>
-          <p class="panel-copy">Real publishing and real replies are disabled. Mock Data and Local Only actions are clearly labeled.</p>
+          <p class="panel-copy">Real replies are disabled. Real publishing is locked by default except the guarded Facebook text-post path. Mock Data and Local Only actions are clearly labeled.</p>
         </div>
       </aside>
 
@@ -87,8 +87,8 @@
           </div>
           <div>
             <span class="status-dot blocked" aria-hidden="true"></span>
-            <strong>Real publishing disabled</strong>
-            <span>No social APIs are called</span>
+            <strong>Real publishing locked</strong>
+            <span>Facebook requires explicit confirmation</span>
           </div>
         </section>
 
@@ -162,7 +162,7 @@
             <div class="section-header compact">
               <div>
                 <h2 id="control-safety-heading">Safety Status</h2>
-                <p>Real publishing and automatic replies stay disabled.</p>
+                <p>Real replies stay disabled. Real publishing is locked by default and guarded where enabled.</p>
               </div>
             </div>
             <div class="control-task-list" id="control-safety-list" aria-live="polite"></div>
@@ -232,7 +232,7 @@
             <article class="setup-checklist-item">
               <span class="card-status needs-review">not started</span>
               <strong>Manual export tested</strong>
-              <p>Manual export remains the safe posting path until real publishing is enabled later.</p>
+                <p>Manual export remains the default safe posting path unless you intentionally enable guarded Facebook text posting.</p>
             </article>
           </div>
         </section>
@@ -260,8 +260,8 @@
             </div>
             <div>
               <span class="status-dot blocked" aria-hidden="true"></span>
-              <strong>Real publishing disabled</strong>
-              <span>Disabled until a future safety-gated build</span>
+              <strong>Real publishing locked</strong>
+              <span>Facebook requires safety-gated setup</span>
             </div>
           </section>
 
@@ -308,7 +308,8 @@
               <span class="setup-guide-step">3</span>
               <div>
                 <h2>Upload or import media</h2>
-                <p>Add real job photos or videos in Media Library. Tag service type, location context, notes, and content angle so generated drafts have useful context.</p>
+                <p>Add real job photos or videos in Media Library. Aim for 20 real media items before serious generation; 5 is enough for starter/demo mode.</p>
+                <p class="muted-copy">Best starter mix: before/after examples, finished job photos, behind-the-scenes process, team/process photos, customer problem examples, and seasonal or location-specific shots.</p>
                 <div class="button-row">
                   <a class="primary-button link-button" href="#media">Open Media Library</a>
                   <a class="secondary-button link-button" href="#generate">Generate after media</a>
@@ -321,7 +322,7 @@
               <div>
                 <h2>Connect your chosen social platforms</h2>
                 <p>Pick the platforms you want to prepare content for: Facebook, Instagram, Threads, YouTube Shorts, TikTok, LinkedIn, or X.</p>
-                <p class="muted-copy">Current connections are mock/scaffolded. Real OAuth, tokens, and real publishing stay disabled until a future guarded build.</p>
+                <p class="muted-copy">Current connections are mock/scaffolded unless you configure real OAuth. Facebook text publishing stays locked behind the guarded Publish Queue path.</p>
                 <div class="button-row">
                   <a class="primary-button link-button" href="#connected">Mock-connect accounts</a>
                   <a class="secondary-button link-button" href="#setup">Review setup wizard</a>
@@ -423,7 +424,7 @@
             <div>
               <span class="status-dot blocked" aria-hidden="true"></span>
               <strong>Real publishing</strong>
-              <span>Real publishing: disabled</span>
+              <span>Real publishing: locked by default</span>
             </div>
           </section>
 
@@ -554,7 +555,7 @@
               <div class="section-header compact-header">
                 <div>
                   <h2 id="onboarding-media-heading">5. First media</h2>
-                  <p>Import a local photo or video, use demo records, or skip for now.</p>
+                  <p>Import a local photo or video, use demo records, or skip for now. For better AI drafts, aim for 20 real media items over time.</p>
                 </div>
               </div>
               <input id="onboarding-media-input" type="file" accept="image/*,video/*" multiple hidden />
@@ -590,7 +591,7 @@
                 <li>Approve drafts.</li>
                 <li>Schedule posts.</li>
                 <li>Track analytics.</li>
-                <li>Use manual export until real publishing is enabled.</li>
+                <li>Use manual export by default, or guarded Facebook text posting after setup.</li>
               </ol>
             </section>
           </div>
@@ -615,7 +616,7 @@
             <div id="safety-publishing-status">
               <span class="status-dot blocked" aria-hidden="true"></span>
               <strong>Publishing safety status</strong>
-              <span>Real publishing remains disabled</span>
+              <span>Real publishing is locked by default</span>
             </div>
             <div id="safety-reply-status">
               <span class="status-dot warning" aria-hidden="true"></span>
@@ -771,6 +772,31 @@
               </div>
               <button class="secondary-button" id="media-reset-button" type="button">Reset demo media</button>
             </div>
+
+            <section class="media-readiness-panel" id="media-readiness-panel" aria-labelledby="media-readiness-heading">
+              <div class="media-readiness-header">
+                <div>
+                  <h3 id="media-readiness-heading">Media readiness</h3>
+                  <p id="media-readiness-summary">Add real job photos and videos so generated drafts can use your actual work.</p>
+                </div>
+                <span class="card-status local-only" id="media-readiness-tier">Not enough yet</span>
+              </div>
+              <div class="media-readiness-meter" aria-label="Progress toward 20 recommended real media items">
+                <span id="media-readiness-progress"></span>
+              </div>
+              <p class="media-readiness-copy">
+                <strong id="media-readiness-count">0 of 20 recommended media items</strong>
+                <span id="media-readiness-next">Upload at least 5 real items for starter mode, then build toward 20 for stronger generation.</span>
+              </p>
+              <ul class="media-readiness-mix" aria-label="Recommended starter media mix">
+                <li>5 before/after examples</li>
+                <li>5 finished job photos</li>
+                <li>3 behind-the-scenes photos or videos</li>
+                <li>3 team or process shots</li>
+                <li>2 customer problem examples</li>
+                <li>2 seasonal or location-specific examples</li>
+              </ul>
+            </section>
 
             <div class="media-controls" aria-label="Media filters">
               <label class="field">
@@ -1256,7 +1282,7 @@
           <header class="topbar">
             <div>
               <h1>Settings</h1>
-              <p>Local app preferences and safety controls. Real publishing remains disabled.</p>
+              <p>Local app preferences and safety controls. Real publishing is locked by default.</p>
             </div>
             <button class="primary-button" type="submit" form="settings-form">Save settings</button>
           </header>
@@ -1314,12 +1340,39 @@
                 <label class="field">
                   <span>AI provider preference</span>
                   <select id="aiProviderPreference" name="aiProviderPreference" required>
-                    <option value="mock">Mock</option>
-                    <option value="local">Local</option>
-                    <option value="openai">OpenAI, later</option>
-                    <option value="anthropic">Anthropic, later</option>
+                    <option value="mock">Mock, offline default</option>
+                    <option value="local">Local AI runtime, Ollama</option>
+                    <option value="openai">OpenAI cloud API, later</option>
+                    <option value="anthropic">Anthropic cloud API, later</option>
                   </select>
+                  <small>Local requires Ollama plus ENABLE_LOCAL_AI_CALLS=true in .env. Cloud APIs stay disabled until explicitly configured later.</small>
                 </label>
+
+                <label class="field">
+                  <span>Color scheme</span>
+                  <select id="themeColorScheme" name="themeColorScheme" required>
+                    <option value="classic_blue">Classic Blue</option>
+                    <option value="forest_green">Forest Green</option>
+                    <option value="sunrise_coral">Sunrise Coral</option>
+                    <option value="slate_violet">Slate Violet</option>
+                    <option value="teal_mint">Teal Mint</option>
+                    <option value="graphite_gold">Graphite Gold</option>
+                    <option value="rose_plum">Rose Plum</option>
+                    <option value="sky_indigo">Sky Indigo</option>
+                    <option value="olive_sage">Olive Sage</option>
+                    <option value="espresso_sand">Espresso Sand</option>
+                  </select>
+                  <small>Local Only: changes this app's appearance, not content, approvals, publishing, or API settings.</small>
+                </label>
+
+                <div class="theme-scheme-preview" id="themeColorSchemePreview" aria-live="polite" aria-label="Selected color scheme preview">
+                  <span class="theme-scheme-name">Classic Blue</span>
+                  <span class="theme-swatch-row" aria-hidden="true">
+                    <span class="theme-swatch"></span>
+                    <span class="theme-swatch"></span>
+                    <span class="theme-swatch"></span>
+                  </span>
+                </div>
               </div>
             </section>
 
@@ -1742,8 +1795,8 @@
           <section class="status-strip" aria-label="Generate safety status">
             <div>
               <span class="status-dot safe" aria-hidden="true"></span>
-              <strong>Mock provider</strong>
-              <span>No real AI calls</span>
+              <strong>Generator mode</strong>
+              <span>Mock by default, local Ollama optional</span>
             </div>
             <div>
               <span class="status-dot warning" aria-hidden="true"></span>
@@ -1790,6 +1843,9 @@
             <fieldset class="generate-fieldset" aria-labelledby="generate-media-heading">
               <legend id="generate-media-heading">Media selection</legend>
               <p class="field-hint">Select one or more local media records. Job context shown when available.</p>
+              <div class="media-readiness-banner" id="generate-media-readiness" role="status">
+                Add real media for better generation. Recommended: 20 real media items. Starter mode begins at 5.
+              </div>
               <div class="media-state empty-state" id="generate-media-empty" hidden>
                 No media yet. Import images or video in the Media Library to use them here.
               </div>
@@ -1912,7 +1968,7 @@
             </div>
 
             <div class="media-state loading-state" id="generate-loading" role="status" hidden>
-              Generating drafts with the local mock provider...
+              Generating drafts with the selected local/mock provider...
             </div>
             <p class="empty-state" id="generate-results-empty">
               No drafts yet. Pick media, platforms, a goal, and an angle, then click "Generate drafts".
@@ -1969,10 +2025,10 @@
               </div>
 
               <div class="calendar-toolbar-right">
-                <select class="calendar-view-select" id="calendar-view-select" aria-label="Calendar view">
-                  <option value="week">Week view</option>
-                  <option value="month">Month view</option>
-                  <option value="list">Agenda</option>
+                <select class="calendar-view-select calendar-view-toggle" id="calendar-view-select" aria-label="Calendar view">
+                  <option id="calendar-view-week" value="week">Week view</option>
+                  <option id="calendar-view-month" value="month">Month view</option>
+                  <option id="calendar-view-list" value="list">Agenda</option>
                 </select>
 
                 <div class="calendar-filter-wrap">
@@ -2109,7 +2165,7 @@
           <header class="topbar">
             <div>
               <h1>Publish Queue</h1>
-              <p>Local queue only. Review readiness, preflight blockers, manual export, and mock/demo actions. Real publishing disabled.</p>
+              <p>Local queue by default. Review readiness, preflight blockers, Manual Export, mock/demo actions, and the guarded Facebook-only real publish path when explicitly enabled.</p>
             </div>
             <div class="topbar-actions">
               <button class="primary-button" id="queue-run-preflight" type="button">Run preflight check now</button>
@@ -2129,8 +2185,8 @@
             </div>
             <div>
               <span class="status-dot blocked" aria-hidden="true"></span>
-              <strong>Real publishing disabled</strong>
-              <span>No social APIs are called</span>
+              <strong>Real publishing locked</strong>
+              <span>Facebook requires explicit flags and confirmation</span>
             </div>
           </section>
 
@@ -2165,7 +2221,7 @@
             <div class="section-header compact-header">
               <div>
                 <h2 id="queue-screen-heading">Local queue readiness</h2>
-                <p>Local queue readiness. When launched through the localhost bridge, queue actions persist to SQLite. Real publishing stays disabled.</p>
+                <p>Local queue readiness. When launched through the localhost bridge, queue actions persist to SQLite. Facebook real publishing is locked behind strict flags and typed confirmation.</p>
               </div>
               <span class="card-status mock-mode">Manual/mock only</span>
             </div>
@@ -2260,7 +2316,7 @@
                   <div class="section-header compact-header">
                     <div>
                       <h2 id="queue-detail-heading">Queue item detail</h2>
-                      <p id="queue-detail-summary">Manual export is the safe path. Future real publishing remains disabled.</p>
+                      <p id="queue-detail-summary">Manual Export is the default safe path. Facebook real publishing requires strict local gates and typed confirmation.</p>
                     </div>
                     <span class="result-status" id="queue-detail-status">waiting</span>
                   </div>
@@ -2274,7 +2330,7 @@
                     <div><dt>Matched account</dt><dd id="queue-detail-account-name">-</dd></div>
                     <div><dt>Missing scopes</dt><dd id="queue-detail-account-scopes">-</dd></div>
                     <div><dt>Manual export</dt><dd id="queue-detail-manual-export">-</dd></div>
-                    <div><dt>Real publishing</dt><dd id="queue-detail-real-publishing">Real publishing disabled in this build</dd></div>
+                    <div><dt>Real publishing</dt><dd id="queue-detail-real-publishing">Locked unless Facebook safety flags and confirmation are present</dd></div>
                     <div><dt>Mock publish</dt><dd id="queue-detail-mock-publish">-</dd></div>
                     <div><dt>Related scheduled post</dt><dd id="queue-detail-scheduled">-</dd></div>
                     <div><dt>Related original draft</dt><dd id="queue-detail-draft">-</dd></div>
@@ -2311,12 +2367,13 @@
 
                   <section class="queue-action-panel" aria-label="Manual queue actions">
                     <h3>Manual action area</h3>
-                    <p>These actions update local demo records only. They never call social APIs.</p>
+                    <p>Manual Export and Mock Publish stay local. Publish to Facebook is the only guarded real action here, requires the localhost API bridge, all safety flags, and typing PUBLISH TO FACEBOOK.</p>
                     <p class="form-message success-message" id="queue-action-message" role="status" hidden></p>
                     <p class="form-message error-message" id="queue-action-error" role="alert" hidden></p>
                     <div class="calendar-actions">
                       <button class="secondary-button" id="queue-manual-export" type="button">Mark manually exported</button>
                       <button class="secondary-button" id="queue-mock-publish" type="button">Mock publish</button>
+                      <button class="danger-button" id="queue-facebook-publish" type="button">Publish to Facebook (real)</button>
                       <button class="secondary-button" id="queue-cancel" type="button">Cancel queue item</button>
                       <a class="secondary-button link-button" id="queue-open-calendar" href="#calendar">Open scheduled post in Calendar</a>
                       <a class="secondary-button link-button" id="queue-open-draft" href="#drafts">Open original draft</a>
@@ -2673,21 +2730,24 @@
               <div class="section-header compact-header">
                 <div><h2 id="analytics-platform-heading">Platform breakdown</h2><p>Compare where content earns attention and lead signals.</p></div>
               </div>
-              <div class="analytics-table-wrap"><table><thead><tr><th>Platform</th><th>Posts</th><th>Impressions / views</th><th>Engagements</th><th>Clicks</th><th>Leads</th><th>Eng. rate</th><th>Lead rate</th></tr></thead><tbody id="analytics-platform-breakdown"></tbody></table></div>
+              <p class="table-scroll-hint">On narrow screens, swipe sideways to compare all metrics.</p>
+              <div class="analytics-table-wrap" tabindex="0" aria-label="Scrollable platform metrics table"><table><thead><tr><th>Platform</th><th>Posts</th><th>Impressions / views</th><th>Engagements</th><th>Clicks</th><th>Leads</th><th>Eng. rate</th><th>Lead rate</th></tr></thead><tbody id="analytics-platform-breakdown"></tbody></table></div>
             </section>
 
             <section class="workspace-section analytics-panel" aria-labelledby="analytics-goal-heading">
               <div class="section-header compact-header">
                 <div><h2 id="analytics-goal-heading">Content goal breakdown</h2><p>See which post goals are worth repeating.</p></div>
               </div>
-              <div class="analytics-table-wrap"><table><thead><tr><th>Goal</th><th>Posts</th><th>Eng. rate</th><th>Lead rate</th><th>Score</th></tr></thead><tbody id="analytics-goal-breakdown"></tbody></table></div>
+              <p class="table-scroll-hint">On narrow screens, swipe sideways to compare all metrics.</p>
+              <div class="analytics-table-wrap" tabindex="0" aria-label="Scrollable content goal metrics table"><table><thead><tr><th>Goal</th><th>Posts</th><th>Eng. rate</th><th>Lead rate</th><th>Score</th></tr></thead><tbody id="analytics-goal-breakdown"></tbody></table></div>
             </section>
 
             <section class="workspace-section analytics-panel" aria-labelledby="analytics-angle-heading">
               <div class="section-header compact-header">
                 <div><h2 id="analytics-angle-heading">Content angle breakdown</h2><p>Find the themes that resonate with your audience.</p></div>
               </div>
-              <div class="analytics-table-wrap"><table><thead><tr><th>Angle</th><th>Posts</th><th>Eng. rate</th><th>Lead rate</th><th>Score</th></tr></thead><tbody id="analytics-angle-breakdown"></tbody></table></div>
+              <p class="table-scroll-hint">On narrow screens, swipe sideways to compare all metrics.</p>
+              <div class="analytics-table-wrap" tabindex="0" aria-label="Scrollable content angle metrics table"><table><thead><tr><th>Angle</th><th>Posts</th><th>Eng. rate</th><th>Lead rate</th><th>Score</th></tr></thead><tbody id="analytics-angle-breakdown"></tbody></table></div>
             </section>
           </section>
 

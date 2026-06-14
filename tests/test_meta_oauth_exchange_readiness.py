@@ -84,18 +84,24 @@ class MetaOAuthExchangeReadinessTest(unittest.TestCase):
             called["count"] += 1
             raise AssertionError("network should not be called")
 
+        with patch.dict(os.environ, self._real_oauth_env(), clear=True):
+            _start_service, state = self._service_with_state(db_path, transport=fail_if_called)
+
         with patch.dict(
             os.environ,
-            self._real_oauth_env(
-                INTEGRATIONS_MODE="disabled",
-                ENABLE_REAL_OAUTH="false",
-            ),
+            self._real_oauth_env(INTEGRATIONS_MODE="disabled", ENABLE_REAL_OAUTH="false"),
             clear=True,
         ):
-            service, state = self._service_with_state(
+            service = OAuthFlowService(
                 db_path,
                 integrations_mode="disabled",
-                transport=fail_if_called,
+                http_client_config=PlatformHttpClientConfig(
+                    provider="meta",
+                    platform="instagram",
+                    safetyMode=NetworkSafetyMode.ENABLED,
+                    allowNetwork=True,
+                    transport=fail_if_called,
+                ),
             )
             result = service.handle_callback(
                 platform="instagram",
@@ -116,12 +122,14 @@ class MetaOAuthExchangeReadinessTest(unittest.TestCase):
             called["count"] += 1
             raise AssertionError("network should not be called")
 
+        with patch.dict(os.environ, self._real_oauth_env(), clear=True):
+            service, state = self._service_with_state(db_path, transport=fail_if_called)
+
         with patch.dict(
             os.environ,
             self._real_oauth_env(ENABLE_REAL_NETWORK_CALLS="false"),
             clear=True,
         ):
-            service, state = self._service_with_state(db_path, transport=fail_if_called)
             result = service.handle_callback(
                 platform="instagram",
                 state=state,
@@ -141,8 +149,10 @@ class MetaOAuthExchangeReadinessTest(unittest.TestCase):
             called["count"] += 1
             raise AssertionError("network should not be called")
 
-        with patch.dict(os.environ, self._real_oauth_env(META_CLIENT_SECRET=""), clear=True):
+        with patch.dict(os.environ, self._real_oauth_env(), clear=True):
             service, state = self._service_with_state(db_path, transport=fail_if_called)
+
+        with patch.dict(os.environ, self._real_oauth_env(META_CLIENT_SECRET=""), clear=True):
             result = service.handle_callback(
                 platform="instagram",
                 state=state,
@@ -154,6 +164,50 @@ class MetaOAuthExchangeReadinessTest(unittest.TestCase):
         self.assertEqual(result.status, "setup_required")
         self.assertIn("META_CLIENT_SECRET", result.warnings[0])
         self.assertEqual(called["count"], 0)
+
+    def test_real_oauth_start_builds_provider_url_and_state_when_configured(self):
+        db_path = self._database()
+
+        with patch.dict(os.environ, self._real_oauth_env(), clear=True):
+            service = OAuthFlowService(db_path, integrations_mode="real_oauth")
+            result = service.start_oauth(
+                platform="facebook",
+                redirect_uri="http://localhost:8000/api/connect/facebook/callback",
+                now="2026-05-28T12:00:00Z",
+            )
+
+        self.assertTrue(result.success)
+        self.assertEqual(result.status, "redirect_ready")
+        self.assertIn("facebook.com", result.authorizationUrl or "")
+        self.assertIn("/dialog/oauth", result.authorizationUrl or "")
+        self.assertIn("state=", result.authorizationUrl or "")
+        self.assertIsNotNone(result.stateId)
+        self.assertIn("real_oauth_only", " ".join(result.warnings))
+
+        with closing(sqlite3.connect(db_path)) as connection:
+            state_count = connection.execute(
+                "SELECT COUNT(*) FROM oauth_states WHERE platform = 'facebook'"
+            ).fetchone()[0]
+        self.assertEqual(state_count, 1)
+
+    def test_real_oauth_start_missing_config_does_not_store_state(self):
+        db_path = self._database()
+
+        with patch.dict(os.environ, self._real_oauth_env(META_CLIENT_SECRET=""), clear=True):
+            service = OAuthFlowService(db_path, integrations_mode="real_oauth")
+            result = service.start_oauth(
+                platform="facebook",
+                redirect_uri="http://localhost:8000/api/connect/facebook/callback",
+                now="2026-05-28T12:00:00Z",
+            )
+
+        self.assertFalse(result.success)
+        self.assertEqual(result.status, "setup_required")
+        with closing(sqlite3.connect(db_path)) as connection:
+            state_count = connection.execute(
+                "SELECT COUNT(*) FROM oauth_states WHERE platform = 'facebook'"
+            ).fetchone()[0]
+        self.assertEqual(state_count, 0)
 
     def test_invalid_state_does_not_call_network(self):
         db_path = self._database()

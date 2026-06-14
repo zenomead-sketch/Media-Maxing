@@ -32,6 +32,8 @@ DEFAULT_PROVIDER_NAME: AIProviderName = "mock"
 OPENAI_API_KEY_ENV = "OPENAI_API_KEY"
 ANTHROPIC_API_KEY_ENV = "ANTHROPIC_API_KEY"
 LOCAL_AI_BASE_URL_ENV = "LOCAL_AI_BASE_URL"
+LOCAL_AI_MODEL_ENV = "LOCAL_AI_MODEL"
+ENABLE_LOCAL_AI_CALLS_ENV = "ENABLE_LOCAL_AI_CALLS"
 PROVIDER_PREFERENCE_ENV = "AI_PROVIDER_PREFERENCE"
 
 
@@ -61,6 +63,7 @@ class AIProviderConfig:
     provider_name: str = DEFAULT_PROVIDER_NAME
     integrations_mode: str = "mock"
     enable_real_network_calls: bool = False
+    enable_local_ai_calls: bool = False
     api_keys: dict[str, str] = field(default_factory=dict, repr=False)
     base_urls: dict[str, str] = field(default_factory=dict)
     model_overrides: dict[str, str] = field(default_factory=dict)
@@ -81,6 +84,7 @@ class AIProviderConfig:
             "provider_name": self.provider_name,
             "integrations_mode": self.integrations_mode,
             "enable_real_network_calls": self.enable_real_network_calls,
+            "enable_local_ai_calls": self.enable_local_ai_calls,
             "api_keys_present": {
                 name: bool((value or "").strip()) for name, value in self.api_keys.items()
             },
@@ -94,6 +98,7 @@ class AIProviderConfig:
             f"provider_name={self.provider_name!r}, "
             f"integrations_mode={self.integrations_mode!r}, "
             f"enable_real_network_calls={self.enable_real_network_calls}, "
+            f"enable_local_ai_calls={self.enable_local_ai_calls}, "
             f"api_keys=<redacted>, "
             f"base_urls={self.base_urls!r}, "
             f"model_overrides={self.model_overrides!r})"
@@ -126,6 +131,7 @@ class AIProviderConfig:
             provider_name=_normalize_provider_name(candidate),
             integrations_mode=(environment.get("INTEGRATIONS_MODE") or "mock").strip().lower(),
             enable_real_network_calls=_env_truthy(environment.get("ENABLE_REAL_NETWORK_CALLS")),
+            enable_local_ai_calls=_env_truthy(environment.get(ENABLE_LOCAL_AI_CALLS_ENV)),
             api_keys={
                 "openai": environment.get(OPENAI_API_KEY_ENV, ""),
                 "anthropic": environment.get(ANTHROPIC_API_KEY_ENV, ""),
@@ -133,5 +139,7 @@ class AIProviderConfig:
             base_urls={
                 "local": (environment.get(LOCAL_AI_BASE_URL_ENV) or "").strip(),
             },
-            model_overrides={},
+            model_overrides={
+                "local": (environment.get(LOCAL_AI_MODEL_ENV) or "").strip(),
+            },
         )

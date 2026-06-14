@@ -4,7 +4,7 @@
 
 This project is a local-first AI social media manager for small businesses and local service businesses. It helps a user turn real business context, job media, approvals, analytics, and engagement into safer social media workflows.
 
-The current handoff is `0.1.0-local-test`. It is ready for local testing, not production SaaS. Real publishing remains disabled.
+The current handoff is `0.1.0-local-test`. It is ready for local testing, not production SaaS. Real publishing is locked by default; guarded Facebook Page text posting exists for personal local testing only.
 
 ## Architecture summary
 
@@ -60,7 +60,7 @@ Local files live under `data/`. Exports go under `data/exports/`. Backups go und
 - Preflight blocks critical safety issues.
 - Emergency pause blocks scheduling, queue readiness, mock publishing, future real publishing, future real replies, and unsafe automation.
 - Manual Export is the safe posting path.
-- Real publishing remains disabled.
+- Real publishing is locked by default, except guarded Facebook Page text posting after explicit setup.
 
 ## AI model/provider model
 

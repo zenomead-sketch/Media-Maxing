@@ -1,5 +1,6 @@
 import os
 import unittest
+import json
 from unittest import mock
 
 from scripts.ai.config import AIProviderConfig
@@ -61,6 +62,7 @@ class RealProviderGatingTest(unittest.TestCase):
     """Real provider stubs must refuse to generate unless safety gates pass."""
 
     real_provider_names = ("openai", "anthropic", "local")
+    cloud_provider_names = ("openai", "anthropic")
 
     def test_real_providers_disabled_when_environment_is_empty(self):
         with mock.patch.dict(os.environ, {}, clear=True):
@@ -69,9 +71,11 @@ class RealProviderGatingTest(unittest.TestCase):
                     provider = get_provider(name)
                     with self.assertRaises(ProviderDisabledError) as raised:
                         provider.generate_bundle(_minimal_input(), ContentGenerationOptions())
-                    # The disabled reason should mention INTEGRATIONS_MODE because
-                    # that is the first gate checked.
-                    self.assertIn("INTEGRATIONS_MODE", str(raised.exception))
+                    message = str(raised.exception)
+                    if name == "local":
+                        self.assertIn("ENABLE_LOCAL_AI_CALLS", message)
+                    else:
+                        self.assertIn("INTEGRATIONS_MODE", message)
 
     def test_real_provider_blocked_when_network_gate_off(self):
         env = {
@@ -82,7 +86,7 @@ class RealProviderGatingTest(unittest.TestCase):
             "LOCAL_AI_BASE_URL": "http://localhost:11434",
         }
         with mock.patch.dict(os.environ, env, clear=True):
-            for name in self.real_provider_names:
+            for name in self.cloud_provider_names:
                 with self.subTest(provider=name):
                     with self.assertRaises(ProviderDisabledError) as raised:
                         get_provider(name).generate_bundle(
@@ -96,7 +100,7 @@ class RealProviderGatingTest(unittest.TestCase):
             "ENABLE_REAL_NETWORK_CALLS": "true",
         }
         with mock.patch.dict(os.environ, env, clear=True):
-            for name in self.real_provider_names:
+            for name in self.cloud_provider_names:
                 with self.subTest(provider=name):
                     with self.assertRaises(ProviderDisabledError) as raised:
                         get_provider(name).generate_bundle(
@@ -118,13 +122,66 @@ class RealProviderGatingTest(unittest.TestCase):
             "LOCAL_AI_BASE_URL": "http://localhost:11434",
         }
         with mock.patch.dict(os.environ, env, clear=True):
-            for name in ("openai", "anthropic", "local"):
+            for name in ("openai", "anthropic"):
                 with self.subTest(provider=name):
                     with self.assertRaises(ProviderDisabledError) as raised:
                         get_provider(name).generate_bundle(
                             _minimal_input(), ContentGenerationOptions()
                         )
                     self.assertIn("not yet implemented", str(raised.exception))
+
+
+class _FakeOllamaResponse:
+    def __init__(self, text: str):
+        self._payload = json.dumps({"response": text}).encode("utf-8")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        return False
+
+    def read(self):
+        return self._payload
+
+
+class LocalProviderOllamaTest(unittest.TestCase):
+    def test_local_provider_generates_bundle_with_mocked_ollama_response(self):
+        env = {
+            "APP_ENV": "development",
+            "ENABLE_LOCAL_AI_CALLS": "true",
+            "LOCAL_AI_BASE_URL": "http://127.0.0.1:11434",
+            "LOCAL_AI_MODEL": "test-local-model",
+        }
+        with mock.patch.dict(os.environ, env, clear=True):
+            with mock.patch(
+                "scripts.ai.providers.local.urllib.request.urlopen",
+                return_value=_FakeOllamaResponse(
+                    "A careful local caption about the project. Message us to ask about next steps."
+                ),
+            ) as urlopen:
+                bundle = get_provider("local").generate_bundle(
+                    _minimal_input(),
+                    ContentGenerationOptions(provider_name="local", include_hashtags=True),
+                )
+
+        self.assertEqual(bundle.generation_provider, "local")
+        self.assertEqual(bundle.provider_metadata["model"], "test-local-model")
+        self.assertTrue(bundle.provider_metadata["local_only"])
+        self.assertEqual(bundle.posts[0].status, "needs_review")
+        self.assertIn("careful local caption", bundle.posts[0].caption.lower())
+        self.assertGreaterEqual(urlopen.call_count, 1)
+
+    def test_local_provider_blocks_non_loopback_url_by_default(self):
+        env = {
+            "ENABLE_LOCAL_AI_CALLS": "true",
+            "LOCAL_AI_BASE_URL": "https://example.com",
+            "LOCAL_AI_MODEL": "test-local-model",
+        }
+        with mock.patch.dict(os.environ, env, clear=True):
+            with self.assertRaises(ProviderDisabledError) as raised:
+                get_provider("local").generate_text(AITextGenerationRequest(prompt="hello"))
+        self.assertIn("localhost", str(raised.exception))
 
 
 class RealProviderRaisesOnAllPrimitivesTest(unittest.TestCase):
@@ -171,6 +228,21 @@ class ProviderFromConfigTest(unittest.TestCase):
             with self.assertRaises(ProviderDisabledError):
                 provider.generate_text(AITextGenerationRequest(prompt="x"))
 
+    def test_local_config_exposes_safe_local_fields_without_secrets(self):
+        env = {
+            "AI_PROVIDER_PREFERENCE": "local",
+            "ENABLE_LOCAL_AI_CALLS": "true",
+            "LOCAL_AI_BASE_URL": "http://127.0.0.1:11434",
+            "LOCAL_AI_MODEL": "test-local-model",
+        }
+        with mock.patch.dict(os.environ, env, clear=True):
+            config = AIProviderConfig.from_environment()
+        safe = config.safe_dict()
+        self.assertEqual(safe["provider_name"], "local")
+        self.assertTrue(safe["enable_local_ai_calls"])
+        self.assertEqual(safe["base_urls"]["local"], "http://127.0.0.1:11434")
+        self.assertEqual(safe["model_overrides"]["local"], "test-local-model")
+
 
 class ListAvailableProvidersTest(unittest.TestCase):
     def test_mock_listed_and_available(self):
@@ -192,7 +264,7 @@ class ListAvailableProvidersTest(unittest.TestCase):
             with self.subTest(provider=name):
                 entry = by_id[name]
                 self.assertFalse(entry["available"])
-                self.assertTrue(entry["requiresNetwork"])
+                self.assertEqual(entry["requiresNetwork"], name != "local")
                 self.assertTrue(entry["reason"])
 
     def test_entries_have_expected_keys(self):

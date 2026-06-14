@@ -952,6 +952,17 @@ export interface AppSettings {
   requireApprovalBeforeReplying: boolean;
   emergencyPauseEnabled: boolean;
   aiProviderPreference: "mock" | "openai" | "anthropic" | "local";
+  themeColorScheme:
+    | "classic_blue"
+    | "forest_green"
+    | "sunrise_coral"
+    | "slate_violet"
+    | "teal_mint"
+    | "graphite_gold"
+    | "rose_plum"
+    | "sky_indigo"
+    | "olive_sage"
+    | "espresso_sand";
   createdAt: string;
   updatedAt: string;
 }

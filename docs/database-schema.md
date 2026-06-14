@@ -373,7 +373,7 @@ Stores AI-generated or manually created draft posts. Generated content defaults 
 - `prompt_version`: prompt template version.
 - `generation_timestamp`: timestamp from the generation bundle.
 - `last_scheduled_at`: last time this draft was copied into a local scheduled post.
-- `publish_readiness_status`: local readiness summary such as `not_scheduled`, `waiting`, `ready`, `blocked`, `manually_exported`, or `mock_published`.
+- `publish_readiness_status`: readiness/publish summary such as `not_scheduled`, `waiting`, `ready`, `blocked`, `manually_exported`, `mock_published`, or `platform_published`.
 - `created_at`: creation timestamp.
 - `updated_at`: last update timestamp.
 
@@ -451,7 +451,7 @@ Stores local publish queue readiness for scheduled posts. This table separates c
 - `generated_post_id`: source generated draft.
 - `brand_profile_id`: related Brand Brain.
 - `platform`: target platform.
-- `queue_status`: `waiting`, `ready`, `blocked`, `processing`, `mock_published`, `manually_exported`, `failed`, `canceled`, or `skipped`.
+- `queue_status`: `waiting`, `ready`, `blocked`, `processing`, `mock_published`, `manually_exported`, `platform_published`, `failed`, `canceled`, or `skipped`.
 - `due_at`: timestamp when the item should become ready for local queue checks.
 - `timezone`: source timezone for display and local schedule interpretation.
 - `priority`: integer priority for future queue sorting.
@@ -475,7 +475,7 @@ Stores local publish queue readiness for scheduled posts. This table separates c
 
 - Queue readiness is local-only.
 - Missing connected accounts should warn for manual export, not block manual export.
-- `ready`, `mock_published`, and `manually_exported` must not be described as real platform publishing.
+- `ready`, `mock_published`, and `manually_exported` must not be described as real platform publishing. `platform_published` is reserved for an explicitly guarded real platform action such as the Facebook Page text-post path.
 - Emergency pause must block moving items to `ready`, mock publishing, and future real publishing.
 
 ## publish_attempts

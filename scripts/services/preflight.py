@@ -541,7 +541,7 @@ class PreflightValidationService:
             connector = get_connector(platform)
         except ConnectorRegistryError:
             return []
-        return [scope.id for scope in connector.getRequiredScopes()]
+        return [scope.id for scope in connector.getRequiredScopes() if scope.required]
 
     def _candidate_social_accounts(
         self,

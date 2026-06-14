@@ -51,11 +51,25 @@ truth instead of inventing facts.
 Media Library tracks local job photos and videos. It stores metadata such as
 tags, service type, location context, and notes. Media files stay local.
 
+For useful generation, add at least 5 real media items for starter mode and aim
+for 20 real media items before relying on drafts for serious content planning.
+At 50 or more items the app treats the library as strong, and at 100 or more it
+has excellent content memory. Generation is not blocked below 20, but the app
+will warn that drafts may be less personalized.
+
+A good first 20-item mix is 5 before/after examples, 5 finished job photos, 3
+behind-the-scenes photos or videos, 3 team or process shots, 2 customer problem
+examples, and 2 seasonal or location-specific examples.
+
 ## Generate
 
 Generate creates mock-provider social drafts using Brand Brain, selected media,
 platforms, goals, and instructions. Drafts are not published and should be saved
 only when you want to review them.
+
+The Generate screen shows a media readiness note. Low media context is guidance,
+not a hard stop: you can still create a starter draft, then improve future
+drafts by adding more real media.
 
 ## Drafts
 
@@ -96,7 +110,9 @@ sent to a real platform.
 ## Settings
 
 Settings stores app preferences, local data path information, AI provider mode,
-and safety defaults. Real API keys can be added later in `.env`, not in the UI.
+color scheme, and safety defaults. The color scheme picker changes only the
+local app appearance; it does not change content, approvals, publishing, or API
+settings. Real API keys can be added later in `.env`, not in the UI.
 
 ## Safety Center
 

@@ -35,7 +35,7 @@ Every feature should be understandable, guided, and documented in plain language
 Hard Safety Rules
 These rules override feature requests unless a future explicit task safely changes them.
 Publishing and Replies
-Do not publish real posts to any social platform unless a future prompt explicitly enables one real platform with safety gates.
+Do not publish real posts to any social platform unless a future prompt explicitly enables one real platform with safety gates. The current exception is guarded Facebook Page text publishing for personal local testing only, and only through the server-side Facebook publishing service with explicit flags, preflight, a connected Page token, emergency pause off, and typed user confirmation.
 Do not send real comment replies or DMs.
 Do not auto-reply to complaints, negative comments, urgent leads, or sensitive messages.
 AI can draft content and reply suggestions, but the user must approve before anything is treated as ready.
@@ -543,7 +543,7 @@ Meta includes:
 Facebook
 Instagram
 Threads
-Meta real OAuth may be implemented only behind explicit safety flags and server-only code. Real publishing remains disabled.
+Meta real OAuth may be implemented only behind explicit safety flags and server-only code. Facebook Page text publishing is allowed only through the guarded service path. Meta image/video publishing, Instagram publishing, Threads publishing, and autonomous posting remain disabled.
 YouTube, TikTok, LinkedIn, X
 These connectors should be scaffolded with:
 setup instructions

@@ -77,7 +77,7 @@ Future publishing eligibility requires everything scheduling requires, plus:
 - No unresolved revision request, rejected status, or archived status exists.
 - A connected account must exist for the target platform before future real publishing can become eligible. Missing accounts remain warnings for local scheduling and manual export.
 
-Real publishing remains disabled by policy. The service currently returns a warning named `real_publishing_disabled_by_policy` even when a draft passes the future publishing gate.
+Real publishing remains locked by default. The approval queue may still return `real_publishing_disabled_by_policy` for broad future publishing checks; the current exception is the separate guarded Facebook Page text-post service.
 
 ## Usage Example
 

@@ -23,6 +23,7 @@ class WebGenerateScreenTest(unittest.TestCase):
             "generate-brand-fields",
             "generate-media-grid",
             "generate-media-empty",
+            "generate-media-readiness",
             "generate-platforms",
             "generate-goal",
             "generate-angle",
@@ -88,6 +89,10 @@ class WebGenerateScreenTest(unittest.TestCase):
         self.assertIn("/api/drafts/save-generated", self.script)
         self.assertIn("localStorage", self.script)
         self.assertIn("local-social-ai-manager.drafts", self.script)
+        self.assertIn("MEDIA_READINESS_RECOMMENDED_MINIMUM = 20", self.script)
+        self.assertIn("Generation remains available; this is guidance, not a hard block.", self.script)
+        self.assertIn("Ready for good generation", self.script)
+        self.assertIn("Low media context", self.script)
 
     def test_routing_includes_new_routes(self):
         # settings.js owns hash routing for the static demo.

@@ -8,13 +8,19 @@ Use the automated launch check first:
 python -m scripts.launch_check
 ```
 
+Run the demo-day walkthrough after that:
+
+```powershell
+python -m scripts.demo_day_check
+```
+
 For a faster script smoke check that skips the full test suite:
 
 ```powershell
 python -m scripts.launch_check --skip-tests
 ```
 
-The script creates a throwaway local database if you pass `--database`, seeds demo data, runs local-only workflow checks, creates backup and diagnostic artifacts, and runs a redacted security scan. It does not call real APIs.
+The launch check creates a throwaway local database if you pass `--database`, seeds demo data, runs local-only workflow checks, creates backup and diagnostic artifacts, and runs a redacted security scan. The demo-day check walks the practical user flow from onboarding through diagnostics. Neither script calls real APIs.
 
 ## Launch Candidate Decision
 
@@ -22,14 +28,16 @@ The script creates a throwaway local database if you pass `--database`, seeds de
 - **Partial**: Core safety and local workflows pass, but a non-blocking item is still documented, such as no production desktop installer.
 - **Fail**: A workflow, safety gate, security scan, or test command fails. Do not treat the app as a launch candidate until fixed.
 
-Real publishing remains disabled in all launch-candidate states.
+Real publishing remains disabled by default in all launch-candidate states. Guarded Facebook Page text posting is allowed only when explicitly configured and confirmed.
 
 ## Install and Setup
 
 - Confirm Python is installed.
 - Confirm `python -m unittest discover tests` can run.
 - Confirm there is no required package install step for the static web MVP.
-- Confirm the user can run the local API server from the README.
+- Confirm the user can start the app with `start-media-maxing.bat`.
+- Confirm the terminal fallback works: `python -m scripts.local_beta_launcher`.
+- Confirm Control Center opens at `http://127.0.0.1:8044/#home`.
 
 ## Environment Variables
 
@@ -83,7 +91,7 @@ Run the local-first workflow without touching real APIs:
 20. Create backup.
 21. Export diagnostics.
 
-The automated `scripts.launch_check` smoke test covers the database-backed parts of this workflow. Browser steps still need a manual pass before calling the app launch-candidate ready.
+The automated `scripts.demo_day_check` script covers this workflow as a deterministic local walkthrough. Browser steps still need a manual pass before calling the app launch-candidate ready.
 
 ## Onboarding
 
@@ -170,7 +178,7 @@ python -m scripts.jobs.local_runner --database data/launch-check/launch.sqlite -
 - Confirm account appears as mock/demo.
 - Disconnect locally.
 - Confirm tokens are never shown.
-- Confirm real publishing remains disabled.
+- Confirm broad real publishing remains disabled and Facebook text publishing remains locked unless explicitly configured.
 
 ## Setup Wizard
 
@@ -235,7 +243,7 @@ python -m scripts.jobs.local_runner --database data/launch-check/launch.sqlite -
 2. Confirm scheduling is blocked.
 3. Confirm queue readiness is blocked or moved to a safe blocked/paused state.
 4. Confirm mock publishing is blocked.
-5. Confirm real publishing remains disabled.
+5. Confirm broad real publishing remains disabled and Facebook text publishing remains locked unless explicitly configured.
 6. Confirm reply sending is unavailable.
 7. Confirm Manual Export behavior matches policy; the MVP blocks manual export while paused.
 8. Confirm safety audit logs are created.

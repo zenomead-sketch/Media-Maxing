@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import uuid
 from contextlib import closing
@@ -34,6 +35,7 @@ from scripts.db.social_connections import create_connector_audit_log
 from scripts.services.platform_http_client import (
     PlatformHttpClient,
     PlatformHttpClientConfig,
+    PlatformHttpRequest,
     PlatformHttpResponse,
     normalize_provider_error,
     redact_http_value,
@@ -315,6 +317,42 @@ class MetaConnector(SocialConnector):
 
         config = load_meta_config()
         request = build_meta_profile_request(config=config, platform=self.platform)
+        if http_client_config and http_client_config.allowNetwork and http_client_config.transport is None:
+            server_token = _server_access_token_from_row(token)
+            if not server_token:
+                return self._record_health(
+                    db_path,
+                    ConnectorHealthResult(
+                        platform=self.platform,
+                        status="expired",
+                        featureStatus=self.featureStatus,
+                        socialAccountId=account_id,
+                        checkedAt=checked_at,
+                        connectionStatus="requires_reauth",
+                        requiresReauth=True,
+                        accountType=account["account_type"],
+                        displayName=account["display_name"],
+                        username=account["username"],
+                        platformAccountId=account["platform_account_id"],
+                        message=(
+                            "Real Meta profile discovery needs a server-side token, "
+                            "but no usable token is stored locally."
+                        ),
+                        errors=[
+                            "token_not_available: Enable secure token storage before real provider discovery."
+                        ],
+                    ),
+                )
+            request = PlatformHttpRequest(
+                method=request.method,
+                url=request.url,
+                query=request.query,
+                headers={**request.headers, "Authorization": f"Bearer {server_token}"},
+                jsonBody=request.jsonBody,
+                formBody=request.formBody,
+                timeoutSeconds=request.timeoutSeconds,
+                mockResponse=request.mockResponse,
+            )
         response = PlatformHttpClient(
             http_client_config
             or PlatformHttpClientConfig(
@@ -335,6 +373,8 @@ class MetaConnector(SocialConnector):
             return self._record_health(db_path, result)
 
         payload = response.json if isinstance(response.json, dict) else {}
+        page_discovery_warnings = _facebook_discovery_warnings(payload) if self.platform == "facebook" else []
+        payload = _facebook_primary_page_payload(payload) if self.platform == "facebook" else payload
         platform_account_id = _first_text(payload, "id") or account["platform_account_id"]
         display_name = (
             _first_text(payload, "name", "display_name")
@@ -349,7 +389,7 @@ class MetaConnector(SocialConnector):
         if account_type not in {"personal", "business", "creator", "page", "channel", "organization", "unknown"}:
             account_type = account["account_type"] or "unknown"
 
-        warnings: list[str] = []
+        warnings: list[str] = list(page_discovery_warnings)
         health_status = "healthy"
         connection_status = "connected"
         if not platform_account_id or not display_name:
@@ -532,6 +572,19 @@ def _load_latest_token(db_path: Path, account_id: str | None) -> sqlite3.Row | N
         ).fetchone()
 
 
+def _server_access_token_from_row(token: sqlite3.Row | None) -> str | None:
+    if token is None:
+        return None
+    if token["encryption_status"] != "insecure_dev_only":
+        return None
+    if os.environ.get("APP_ENV") != "development":
+        return None
+    if os.environ.get("ALLOW_INSECURE_TOKEN_STORAGE", "").strip().lower() != "true":
+        return None
+    token_value = token["encrypted_access_token"]
+    return token_value.strip() if isinstance(token_value, str) and token_value.strip() else None
+
+
 def _connection_requires_reauth(
     account: sqlite3.Row,
     token: sqlite3.Row | None,
@@ -656,6 +709,38 @@ def _first_text(source: dict[str, Any], *keys: str) -> str | None:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return None
+
+
+def _facebook_primary_page_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    data = payload.get("data")
+    if isinstance(data, list):
+        for candidate in data:
+            if isinstance(candidate, dict) and _first_text(candidate, "id", "name"):
+                return candidate
+        return {}
+    return payload
+
+
+def _facebook_discovery_warnings(payload: dict[str, Any]) -> list[str]:
+    warnings: list[str] = []
+    data = payload.get("data")
+    if isinstance(data, list):
+        if not data:
+            warnings.append(
+                "facebook_no_pages_returned: Meta did not return any manageable Facebook Pages."
+            )
+        elif len(data) > 1:
+            warnings.append(
+                "facebook_multiple_pages: Multiple Pages were returned; the first Page was selected for now."
+            )
+        selected = _facebook_primary_page_payload(payload)
+    else:
+        selected = payload
+    if isinstance(selected, dict) and selected.get("access_token"):
+        warnings.append(
+            "facebook_page_token_redacted: A Page access token was returned but was not exposed to the UI."
+        )
+    return warnings
 
 
 def _decode_json(raw_value: str | None, fallback: Any) -> Any:

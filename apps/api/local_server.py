@@ -53,6 +53,7 @@ from scripts.services.backup import BackupService, BackupServiceError
 from scripts.services.content_generation import ContentGenerationService
 from scripts.services.diagnostics import DiagnosticsService, redact_diagnostic_text
 from scripts.services.engagement import EngagementService
+from scripts.services.facebook_publishing import FacebookPublishingService
 from scripts.services.integration_setup import validate_social_integration_setup
 from scripts.services.local_env import load_local_env_file
 from scripts.services.manual_export import ManualExportService
@@ -357,6 +358,16 @@ class LocalApiApplication:
                     queue_item_id,
                     copy_media=bool(body.get("copy_media", False)),
                 )
+            if action == "publish-facebook":
+                return FacebookPublishingService(self.database_path).publish_queue_item(
+                    queue_item_id,
+                    confirmation_phrase=body.get("confirmationPhrase")
+                    or body.get("confirmation_phrase")
+                    or "",
+                    actor_label=body.get("actorLabel")
+                    or body.get("actor_label")
+                    or "local_browser_user",
+                )
         if segments == ["api", "analytics", "snapshots"]:
             analytics = AnalyticsService(self.database_path)
             if method == "GET":
@@ -478,6 +489,7 @@ class LocalApiApplication:
     def _generate_content(self, body: dict[str, Any]) -> dict[str, Any]:
         request = _object(body.get("input"))
         options = _object(body.get("options"))
+        settings = load_app_settings(self.database_path)
 
         def load_brand(profile_id: str) -> dict[str, Any] | None:
             profile = get_brand_profile(self.database_path, profile_id)
@@ -505,11 +517,14 @@ class LocalApiApplication:
         bundle = ContentGenerationService(
             brand_loader=load_brand,
             media_loader=load_media,
-            settings_loader=lambda: load_app_settings(self.database_path),
+            settings_loader=lambda: settings,
             memory_loader=load_memory,
         ).generate(
             _content_generation_input_from_payload(request),
-            _content_generation_options_from_payload(options or request),
+            _content_generation_options_from_payload(
+                options or request,
+                default_provider_name=settings.aiProviderPreference,
+            ),
         )
         bundle.created_at = _now_utc()
         response = _camelize_keys(bundle.to_dict())
@@ -970,9 +985,18 @@ def _content_generation_input_from_payload(payload: dict[str, Any]) -> ContentGe
     )
 
 
-def _content_generation_options_from_payload(payload: dict[str, Any]) -> ContentGenerationOptions:
+def _content_generation_options_from_payload(
+    payload: dict[str, Any],
+    *,
+    default_provider_name: str = "mock",
+) -> ContentGenerationOptions:
     return ContentGenerationOptions(
-        provider_name=_value_alias(payload, "providerName", "provider_name", default="mock"),
+        provider_name=_value_alias(
+            payload,
+            "providerName",
+            "provider_name",
+            default=default_provider_name or "mock",
+        ),
         prompt_id=_value_alias(
             payload,
             "promptId",
