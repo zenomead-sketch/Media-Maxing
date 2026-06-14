@@ -25,7 +25,7 @@ python -m scripts.local_beta_launcher
 ```
 
 This starts the local API and web app together and opens Control Center at
-`http://127.0.0.1:8044/#home`. Real replies and most social APIs stay disabled; Facebook real text publishing stays locked unless you explicitly enable the guarded flags described in `docs/facebook-real-use.md`.
+`http://127.0.0.1:8044/#home`. Real replies and most social APIs stay disabled; guarded Facebook Page text or single-image publishing stays locked unless you explicitly enable the flags described in `docs/facebook-real-use.md`.
 
 To practice with clearly fake demo data:
 
@@ -94,6 +94,31 @@ which generator mode is selected.
 
 Manual Export is the safe posting path. It creates local posting packages and does not publish automatically.
 
+## Guarded Facebook Posting
+
+The first real posting path is intentionally narrow: Facebook Page posts only.
+It can publish either:
+
+- A generated caption as a Facebook Page text post.
+- A generated caption plus exactly one linked local image as a Facebook Page photo post.
+
+It does not support Facebook video, albums, carousels, reels, stories, personal profile posts, comments, DMs, or autonomous/batch publishing.
+
+Real Facebook posting is disabled by default and requires all of these gates:
+
+- Real OAuth/network/publishing flags enabled in `.env`.
+- A connected Facebook Page account.
+- Page permissions including `pages_manage_posts`.
+- A ready Publish Queue item for Facebook.
+- Passed or warning-only preflight.
+- Emergency pause off.
+- Local API bridge running.
+- The exact typed confirmation phrase: `PUBLISH TO FACEBOOK`.
+
+For image posts, the approved scheduled item must have exactly one linked local image in Media Library. The backend uploads that image from local storage to the Facebook Page photo endpoint with the generated caption. Multiple images or video should use **Manual Export** until those paths are built deliberately.
+
+See `docs/facebook-real-use.md` for the setup checklist, required environment flags, token-storage warning, and verification commands.
+
 ## Main workflows
 
 1. Create or confirm Brand Brain.
@@ -104,11 +129,12 @@ Manual Export is the safe posting path. It creates local posting packages and do
 6. Schedule approved drafts on Calendar.
 7. Run local jobs and preflight.
 8. Use Publish Queue and Manual Export.
-9. Add manual analytics or generate mock analytics.
-10. Generate mock engagement and local reply suggestions.
-11. Approve replies locally only.
-12. Generate AI memory and weekly reports.
-13. Use Safety Center, Backup & Data, and Diagnostics before launch testing.
+9. Optionally use guarded Facebook posting for approved Facebook queue items after real setup.
+10. Add manual analytics or generate mock analytics.
+11. Generate mock engagement and local reply suggestions.
+12. Approve replies locally only.
+13. Generate AI memory and weekly reports.
+14. Use Safety Center, Backup & Data, and Diagnostics before launch testing.
 
 ## Safety statement
 
@@ -173,6 +199,7 @@ Planned core features:
 - Local-only calendar scheduling.
 - Publish Queue for approved and scheduled content.
 - Manual export packages for safe posting outside the app.
+- Guarded Facebook Page text or single-image posting for personal local testing after explicit setup.
 - Connected Accounts area for future mock and real integration setup.
 - Analytics Dashboard for mock, manual, imported, and future platform data.
 - Engagement Inbox with local AI reply suggestions.
@@ -548,6 +575,8 @@ Not built yet:
 
 - Production desktop installer or native Tauri/Electron wrapper.
 - AI media analysis and auto-tagging.
-- Real social integrations and real OAuth token exchange.
+- Broad real social integrations beyond the guarded Facebook path.
+- Production-grade token storage for real provider calls.
+- Real OAuth/token refresh hardening beyond current guarded Meta readiness.
 - Desktop file-picker hardening for packaged-app media import.
 - Package-manager based lint/typecheck/build commands.
