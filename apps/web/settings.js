@@ -73,6 +73,83 @@
     "platform_policy_risk",
   ]);
   const mediaRequiredPlatforms = new Set(["instagram", "youtube", "tiktok"]);
+  // Mirrors scripts/ai/platform_limits.py and generate.js. Used by preflight
+  // detection and the local caption auto-fix fallback.
+  const platformCaptionLimits = {
+    instagram: 2200,
+    facebook: 63206,
+    threads: 500,
+    tiktok: 2200,
+    youtube: 5000,
+    linkedin: 3000,
+    x: 280,
+  };
+  function captionLimitForPlatform(platform) {
+    return platformCaptionLimits[platform] || 2200;
+  }
+  function trimCaptionToLimit(text, limit) {
+    if (!limit || text.length <= limit) return text;
+    const budget = Math.max(0, limit - 1);
+    let truncated = text.slice(0, budget);
+    const boundary = truncated.lastIndexOf(" ");
+    if (boundary > 0 && boundary >= budget - 30) {
+      truncated = truncated.slice(0, boundary);
+    }
+    return (truncated.trimEnd() + "…").slice(0, limit);
+  }
+  // Friendly, plain-language presentation for each preflight code. `title` is a
+  // short human heading, `hint` is how to fix it, and `action` is either a
+  // one-click auto-fix or a link to the screen where it's fixed. Codes not
+  // listed fall back to a prettified title.
+  const preflightMeta = {
+    // Auto-fixable
+    caption_too_long: {
+      title: "Caption is too long",
+      hint: "Shorten the caption so it fits this platform's character limit.",
+      action: { kind: "autofix", code: "caption_too_long", label: "Fix automatically" },
+    },
+    // Fix in Drafts
+    missing_caption: { title: "Caption is empty", hint: "Add caption text to the draft.", action: { kind: "link", href: "#drafts", label: "Open draft" } },
+    missing_generated_post: { title: "Source draft is missing", hint: "The original draft no longer exists. Recreate and reschedule it.", action: { kind: "link", href: "#drafts", label: "Open Drafts" } },
+    missing_required_title: { title: "Title is required", hint: "Add a headline/title to the draft for this platform.", action: { kind: "link", href: "#drafts", label: "Open draft" } },
+    missing_required_metadata: { title: "Title is required", hint: "Add the required title/headline for this platform.", action: { kind: "link", href: "#drafts", label: "Open draft" } },
+    missing_required_description: { title: "Description is required", hint: "Add description text to the draft.", action: { kind: "link", href: "#drafts", label: "Open draft" } },
+    draft_not_approved: { title: "Draft isn't approved yet", hint: "Approve the draft before it can pass preflight.", action: { kind: "link", href: "#drafts", label: "Open Drafts" } },
+    draft_rejected: { title: "Draft was rejected", hint: "Rejected drafts can't publish. Restore or recreate it.", action: { kind: "link", href: "#drafts", label: "Open Drafts" } },
+    draft_archived: { title: "Draft is archived", hint: "Unarchive or recreate the draft.", action: { kind: "link", href: "#drafts", label: "Open Drafts" } },
+    unresolved_revision_request: { title: "Draft needs revisions", hint: "Resolve the requested changes, then re-approve.", action: { kind: "link", href: "#drafts", label: "Open Drafts" } },
+    critical_safety_flags: { title: "Safety issues to resolve", hint: "Fix the flagged safety issues in the draft before publishing.", action: { kind: "link", href: "#drafts", label: "Open Drafts" } },
+    // Fix in Media Library
+    missing_required_media: { title: "Media is required", hint: "Attach a photo or video and link it to the draft.", action: { kind: "link", href: "#media", label: "Open Media Library" } },
+    missing_linked_media: { title: "Linked media is missing", hint: "The attached media no longer exists. Re-link or remove it.", action: { kind: "link", href: "#media", label: "Open Media Library" } },
+    unsupported_media_type: { title: "Media type not supported", hint: "Swap to a media type this platform accepts.", action: { kind: "link", href: "#media", label: "Open Media Library" } },
+    missing_required_video: { title: "Video is required", hint: "This platform needs a video asset.", action: { kind: "link", href: "#media", label: "Open Media Library" } },
+    // Fix elsewhere
+    missing_brand_profile: { title: "Brand profile is missing", hint: "Restore your brand profile.", action: { kind: "link", href: "#brand", label: "Open Brand Brain" } },
+    missing_scheduled_time: { title: "No scheduled time set", hint: "Set a valid date and time.", action: { kind: "link", href: "#calendar", label: "Open Calendar" } },
+    missing_scheduled_post: { title: "No scheduled post", hint: "Reschedule this draft from the Calendar.", action: { kind: "link", href: "#calendar", label: "Open Calendar" } },
+    scheduled_post_canceled: { title: "Scheduled post was canceled", hint: "Reschedule the draft to try again.", action: { kind: "link", href: "#calendar", label: "Open Calendar" } },
+    scheduled_post_missed: { title: "Scheduled post was missed", hint: "Reschedule it for a future time.", action: { kind: "link", href: "#calendar", label: "Open Calendar" } },
+    scheduled_post_completed: { title: "Scheduled post already completed" },
+    emergency_pause_enabled: { title: "Emergency Pause is on", hint: "Turn off Emergency Pause to allow readiness.", action: { kind: "link", href: "#safety", label: "Open Safety Center" } },
+    queue_status_not_preflightable: { title: "Can't check this item yet", hint: "Only waiting, ready, or blocked items can be checked." },
+    invalid_platform: { title: "Unsupported platform" },
+    unsupported_platform: { title: "Unsupported platform" },
+    // Warnings / info (friendly headings only)
+    manual_export_only: { title: "Manual export is the safe path" },
+    real_publishing_disabled_by_policy: { title: "Real publishing is off in this build" },
+    real_publishing_disabled: { title: "Real publishing is off in this build" },
+    missing_connected_account: { title: "No connected account yet" },
+    future_real_publish_blocked: { title: "Future real publishing isn't ready" },
+    account_requires_reauth: { title: "Connected account needs reconnect" },
+    account_selection_needed: { title: "Multiple accounts found" },
+    missing_account_scopes: { title: "Account may need more permissions" },
+    account_status_warning: { title: "Account needs review" },
+    alt_text_recommended: { title: "Alt text recommended" },
+    hashtag_guidance: { title: "Hashtag tip" },
+    professional_tone_recommended: { title: "Tone tip" },
+    platform_notes: { title: "Platform note" },
+  };
   const supportedRoutes = ["home", "guide", "media", "generate", "drafts", "calendar", "queue", "connected", "setup", "safety", "backup", "diagnostics", "engagement", "analytics", "brand", "settings", "onboarding"];
   const onboardingStepIds = [
     "welcome",
@@ -3969,14 +4046,45 @@
       .join("");
   }
 
-  function renderPreflightMessages(containerId, messages, emptyText) {
+  function prettifyCode(code) {
+    if (!code) return "Notice";
+    return code.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+  }
+
+  function renderPreflightMessages(containerId, messages, emptyText, withFixes = false) {
     const container = getElement(containerId);
     if (!container) {
       return;
     }
-    container.innerHTML = messages.length
-      ? `<ul class="safety-flag-list">${messages.map((message) => `<li>${escapeHtml(message)}</li>`).join("")}</ul>`
-      : `<p class="result-meta">${escapeHtml(emptyText)}</p>`;
+    if (!messages.length) {
+      container.innerHTML = `<p class="result-meta">${escapeHtml(emptyText)}</p>`;
+      return;
+    }
+    const toneClass = withFixes ? "is-error" : "is-warning";
+    container.innerHTML = `<ul class="preflight-items ${toneClass}">${messages
+      .map((message) => {
+        const separator = message.indexOf(":");
+        const code = (separator >= 0 ? message.slice(0, separator) : "").trim();
+        const detail = (separator >= 0 ? message.slice(separator + 1) : message).trim();
+        const meta = preflightMeta[code] || {};
+        const title = meta.title || prettifyCode(code);
+        const hint = withFixes ? meta.hint : null;
+        let actionHtml = "";
+        if (withFixes && meta.action) {
+          if (meta.action.kind === "autofix") {
+            actionHtml = `<button class="primary-button preflight-fix-button" type="button" data-preflight-fix="${escapeHtml(meta.action.code)}">${escapeHtml(meta.action.label)}</button>`;
+          } else if (meta.action.kind === "link") {
+            actionHtml = `<a class="secondary-button link-button preflight-fix-link" href="${escapeHtml(meta.action.href)}">${escapeHtml(meta.action.label)}</a>`;
+          }
+        }
+        return `<li class="preflight-item">
+            <span class="preflight-title">${escapeHtml(title)}</span>
+            ${detail ? `<span class="preflight-detail">${escapeHtml(detail)}</span>` : ""}
+            ${hint ? `<span class="preflight-hint">How to fix: ${escapeHtml(hint)}</span>` : ""}
+            ${actionHtml}
+          </li>`;
+      })
+      .join("")}</ul>`;
   }
 
   function queueAttempts(item) {
@@ -4092,7 +4200,7 @@
     getElement("queue-detail-media").innerHTML = post?.mediaAssetIds?.length
       ? `<ul class="safety-flag-list">${post.mediaAssetIds.map((id) => `<li>${escapeHtml(id)}</li>`).join("")}</ul>`
       : '<p class="result-meta">No linked media assets.</p>';
-    renderPreflightMessages("queue-detail-errors", errors, "No blocking preflight errors.");
+    renderPreflightMessages("queue-detail-errors", errors, "No blocking preflight errors.", true);
     renderPreflightMessages("queue-detail-warnings", warnings, "No preflight warnings.");
     renderAttemptHistory(item);
     updateQueueActionButtons(item);
@@ -4851,6 +4959,13 @@
     }
     if (!post?.captionSnapshot?.trim()) {
       errors.push("missing_caption: Caption snapshot is required.");
+    } else {
+      const captionLimit = captionLimitForPlatform(item.platform);
+      if (post.captionSnapshot.length > captionLimit) {
+        errors.push(
+          `caption_too_long: Caption is ${post.captionSnapshot.length} characters; ${item.platform} max is ${captionLimit}.`,
+        );
+      }
     }
     const flags = post?.scheduleMetadata?.safetyFlags || [];
     const critical = flags.filter((flag) => criticalQueueFlags.has(flag));
@@ -4975,6 +5090,56 @@
     });
     setQueueMessage(result.eligible ? "success" : "error", result.eligible ? "Preflight passed locally. Item is ready for manual/mock action." : "Preflight blocked this item. Review the errors.");
     renderPublishQueue();
+  }
+
+  async function fixSelectedQueueCaption() {
+    const item = selectedQueueItem();
+    if (!item) {
+      return;
+    }
+    const post = scheduledPostForQueueItem(item);
+    if (!post) {
+      setQueueMessage("error", "No scheduled post is linked to this queue item.");
+      return;
+    }
+    const bridge = activeApiBridge();
+    if (bridge) {
+      try {
+        await bridge.request(`/api/calendar/${encodeURIComponent(post.id)}/fix-caption`, {
+          method: "POST",
+          body: {},
+        });
+        await bridge.sync();
+        setQueueMessage("success", "Caption trimmed to fit the platform limit. Re-running preflight...");
+        await runSelectedQueuePreflight();
+      } catch (error) {
+        setQueueMessage("error", error.message || "Caption could not be auto-fixed.");
+      }
+      return;
+    }
+    const limit = captionLimitForPlatform(post.platform);
+    const original = post.captionSnapshot || "";
+    if (original.length <= limit) {
+      setQueueMessage("success", "Caption already fits the platform limit.");
+      return;
+    }
+    const trimmed = trimCaptionToLimit(original, limit);
+    const now = new Date().toISOString();
+    saveScheduledPosts(
+      loadScheduledPosts().map((scheduled) =>
+        scheduled.id === post.id
+          ? normalizeScheduledPost({ ...scheduled, captionSnapshot: trimmed, updatedAt: now })
+          : scheduled,
+      ),
+    );
+    appendCalendarAuditLog(post.id, "caption_trimmed_to_limit", "Caption trimmed locally to fit the platform limit.", {
+      previousCaptionLength: original.length,
+      captionLength: trimmed.length,
+      platform: post.platform,
+      maxCaptionLength: limit,
+    });
+    setQueueMessage("success", `Caption trimmed to ${trimmed.length} characters. Re-running preflight...`);
+    await runSelectedQueuePreflight();
   }
 
   async function markSelectedQueueManualExported() {
@@ -5240,6 +5405,42 @@
     `;
   }
 
+  function renderCalendarAgenda(posts) {
+    if (!posts.length) {
+      return "";
+    }
+    const groups = new Map();
+    posts.forEach((post) => {
+      const key = new Date(post.scheduledFor).toISOString().slice(0, 10);
+      if (!groups.has(key)) {
+        groups.set(key, []);
+      }
+      groups.get(key).push(post);
+    });
+    return Array.from(groups.values())
+      .map(
+        (items) => `
+          <section class="calendar-agenda-day">
+            <h3 class="calendar-agenda-date">${escapeHtml(formatDate(items[0].scheduledFor))}</h3>
+            <div class="calendar-agenda-items">${items.map(calendarCardMarkup).join("")}</div>
+          </section>
+        `
+      )
+      .join("");
+  }
+
+  function updateCalendarFilterBadge() {
+    const badge = getElement("calendar-filter-badge");
+    if (!badge) {
+      return;
+    }
+    const platform = getElement("calendar-platform-filter")?.value || "all";
+    const status = getElement("calendar-status-filter")?.value || "all";
+    const active = (platform !== "all" ? 1 : 0) + (status !== "all" ? 1 : 0);
+    badge.textContent = String(active);
+    badge.hidden = active === 0;
+  }
+
   function calendarDaysForView() {
     if (calendarState.view === "week") {
       const start = startOfWeek(calendarState.cursorDate);
@@ -5259,9 +5460,7 @@
     if (calendarState.view === "list") {
       grid.hidden = true;
       list.hidden = false;
-      list.innerHTML = posts.length
-        ? posts.map(calendarCardMarkup).join("")
-        : "";
+      list.innerHTML = renderCalendarAgenda(posts);
       return;
     }
 
@@ -5312,14 +5511,17 @@
     const post = selectedCalendarPost();
     const empty = getElement("calendar-detail-empty");
     const content = getElement("calendar-detail-content");
+    const modal = getElement("calendar-detail-modal");
     if (!empty || !content) {
       return;
     }
     if (!post) {
       empty.hidden = false;
       content.hidden = true;
+      if (modal) modal.hidden = true;
       return;
     }
+    if (modal) modal.hidden = false;
     const queue = findQueueItemForPost(post);
     const metadata = post.scheduleMetadata || {};
     empty.hidden = true;
@@ -5368,17 +5570,14 @@
       loading.hidden = false;
       error.hidden = true;
       range.textContent = formatCalendarRange();
-      document.querySelectorAll("[data-calendar-view]").forEach((button) => {
-        const isActive = button.dataset.calendarView === calendarState.view;
-        button.classList.toggle("active", isActive);
-        button.setAttribute("aria-pressed", isActive ? "true" : "false");
-      });
+      const viewSelect = getElement("calendar-view-select");
+      if (viewSelect) viewSelect.value = calendarState.view;
+      const dateNav = getElement("calendar-date-nav");
+      if (dateNav) dateNav.classList.toggle("is-hidden", calendarState.view === "list");
+      updateCalendarFilterBadge();
       const posts = filteredCalendarPosts();
       if (calendarState.selectedPostId && !loadScheduledPosts().some((post) => post.id === calendarState.selectedPostId)) {
         calendarState.selectedPostId = null;
-      }
-      if (!calendarState.selectedPostId && posts.length) {
-        calendarState.selectedPostId = posts[0].id;
       }
       renderCalendarGrid(posts);
       empty.hidden = posts.length > 0;
@@ -5396,6 +5595,14 @@
     calendarState.selectedPostId = postId;
     setCalendarMessage("", "");
     renderCalendar();
+  }
+
+  function closeCalendarDetail() {
+    calendarState.selectedPostId = null;
+    setCalendarMessage("", "");
+    const modal = getElement("calendar-detail-modal");
+    if (modal) modal.hidden = true;
+    renderCalendarDetail();
   }
 
   function persistUpdatedCalendarPost(updatedPost, action, notes, changedFields) {
@@ -5598,11 +5805,9 @@
     }
     renderCalendar();
 
-    document.querySelectorAll("[data-calendar-view]").forEach((button) => {
-      button.addEventListener("click", () => {
-        calendarState.view = button.dataset.calendarView;
-        renderCalendar();
-      });
+    getElement("calendar-view-select").addEventListener("change", (event) => {
+      calendarState.view = event.target.value;
+      renderCalendar();
     });
     getElement("calendar-prev").addEventListener("click", () => {
       const nextDate = new Date(calendarState.cursorDate);
@@ -5630,6 +5835,34 @@
     });
     getElement("calendar-platform-filter").addEventListener("change", renderCalendar);
     getElement("calendar-status-filter").addEventListener("change", renderCalendar);
+
+    const filterToggle = getElement("calendar-filter-toggle");
+    const filterPopover = getElement("calendar-filter-popover");
+    if (filterToggle && filterPopover) {
+      filterToggle.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const willOpen = filterPopover.hidden;
+        filterPopover.hidden = !willOpen;
+        filterToggle.setAttribute("aria-expanded", willOpen ? "true" : "false");
+      });
+      document.addEventListener("click", (event) => {
+        if (filterPopover.hidden) return;
+        if (filterPopover.contains(event.target) || filterToggle.contains(event.target)) return;
+        filterPopover.hidden = true;
+        filterToggle.setAttribute("aria-expanded", "false");
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && !filterPopover.hidden) {
+          filterPopover.hidden = true;
+          filterToggle.setAttribute("aria-expanded", "false");
+        }
+      });
+    }
+    getElement("calendar-filter-clear").addEventListener("click", () => {
+      getElement("calendar-platform-filter").value = "all";
+      getElement("calendar-status-filter").value = "all";
+      renderCalendar();
+    });
     getElement("calendar-grid").addEventListener("click", (event) => {
       const card = event.target.closest("[data-calendar-post-id]");
       if (card) selectCalendarPost(card.dataset.calendarPostId);
@@ -5651,6 +5884,15 @@
         event.preventDefault();
         selectCalendarPost(card.dataset.calendarPostId);
       }
+    });
+    getElement("calendar-detail-close").addEventListener("click", closeCalendarDetail);
+    getElement("calendar-detail-modal").addEventListener("click", (event) => {
+      if (event.target === event.currentTarget) closeCalendarDetail();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      const modal = getElement("calendar-detail-modal");
+      if (modal && !modal.hidden) closeCalendarDetail();
     });
     getElement("calendar-reschedule-form").addEventListener("submit", rescheduleSelectedPost);
     getElement("calendar-cancel-button").addEventListener("click", cancelSelectedPost);
@@ -5699,6 +5941,11 @@
       }
     });
     getElement("queue-run-preflight").addEventListener("click", runSelectedQueuePreflight);
+    getElement("queue-detail-errors").addEventListener("click", (event) => {
+      const button = event.target.closest("[data-preflight-fix]");
+      if (!button) return;
+      if (button.dataset.preflightFix === "caption_too_long") fixSelectedQueueCaption();
+    });
     getElement("queue-manual-export").addEventListener("click", markSelectedQueueManualExported);
     getElement("queue-mock-publish").addEventListener("click", mockPublishSelectedQueueItem);
     getElement("queue-cancel").addEventListener("click", cancelSelectedQueueItem);

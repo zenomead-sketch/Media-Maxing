@@ -49,6 +49,33 @@
     { id: "x", label: "X" },
   ];
 
+  // Single source of truth for per-platform caption limits, mirroring
+  // scripts/ai/platform_limits.py. Generation never exceeds these.
+  const PLATFORM_CAPTION_LIMITS = {
+    instagram: 2200,
+    facebook: 63206,
+    threads: 500,
+    tiktok: 2200,
+    youtube: 5000,
+    linkedin: 3000,
+    x: 280,
+  };
+
+  function captionLimitFor(platform) {
+    return PLATFORM_CAPTION_LIMITS[platform] || 2200;
+  }
+
+  function trimToLimit(text, limit) {
+    if (!limit || text.length <= limit) return text;
+    const budget = Math.max(0, limit - 1);
+    let truncated = text.slice(0, budget);
+    const boundary = truncated.lastIndexOf(" ");
+    if (boundary > 0 && boundary >= budget - 30) {
+      truncated = truncated.slice(0, boundary);
+    }
+    return (truncated.trimEnd() + "…").slice(0, limit);
+  }
+
   const GOAL_CTA = {
     get_leads: "Reply or send a message to ask about availability.",
     show_transformation: "See more recent before-and-after work.",
@@ -275,14 +302,15 @@
   }
 
   function buildPlatformDraft(platform, brand, input, index) {
-    const caption = buildCaption(platform, brand, input);
+    const limit = captionLimitFor(platform);
+    const caption = trimToLimit(buildCaption(platform, brand, input), limit);
     const hashtags = input.includeHashtags ? buildHashtags(brand, input.contentAngle, 5) : [];
     return {
       platform,
       hook: platformHook(platform, brand, input.contentAngle),
       caption,
       shortCaption: caption.length > 110 ? caption.slice(0, 107).trim() + "..." : caption,
-      longCaption: `${caption}\n\nMore detail: ${ANGLE_NOTE[input.contentAngle] || ""}`,
+      longCaption: trimToLimit(`${caption}\n\nMore detail: ${ANGLE_NOTE[input.contentAngle] || ""}`, limit),
       callToAction: input.includeCTA ? GOAL_CTA[input.contentGoal] || null : null,
       hashtags,
       mediaAssetIds: input.selectedMediaIds.slice(),
@@ -592,6 +620,8 @@
     const emptyNote = $("generate-results-empty");
     const clearBtn = $("generate-clear-results");
     const saveBtn = $("generate-save-drafts");
+    const reviewLink = $("generate-review-drafts");
+    if (reviewLink) reviewLink.hidden = true;
     if (!container || !emptyNote) return;
     container.innerHTML = "";
 
@@ -816,6 +846,8 @@
     $("draft-safety-flags").innerHTML = draft.safetyFlags.length
       ? `<ul class="safety-flag-list">${draft.safetyFlags.map((flag) => `<li class="safety-flag">${escapeHtml(flag)}</li>`).join("")}</ul>`
       : '<p class="result-flags none">No safety flags recorded.</p>';
+    const safetySection = $("draft-safety-section");
+    if (safetySection) safetySection.open = draft.safetyFlags.length > 0;
     $("draft-linked-media").innerHTML = draft.mediaAssetIds.length
       ? `<ul class="safety-flag-list">${draft.mediaAssetIds.map((id) => `<li>${escapeHtml(mediaLabel(id))}</li>`).join("")}</ul>`
       : '<p class="result-meta">No linked media assets.</p>';
@@ -970,10 +1002,16 @@
     const bridge = activeApiBridge();
     if (bridge) {
       try {
+        const bridgeActions = {
+          approved: "approve",
+          rejected: "reject",
+          revision_requested: "request_revision",
+          archived: "archive",
+        };
         await bridge.request(`/api/drafts/${encodeURIComponent(draft.id)}/approval`, {
           method: "POST",
           body: {
-            action: action === "revision_requested" ? "request_revision" : action,
+            action: bridgeActions[action] || action,
             reason: notes || "",
           },
         });
@@ -1417,8 +1455,10 @@
         await bridge.sync();
         setSaveStatus(
           "success",
-          `Saved ${additions.length} draft${additions.length === 1 ? "" : "s"} to local SQLite. Drafts list updated.`,
+          `Saved ${additions.length} draft${additions.length === 1 ? "" : "s"} to local SQLite. Review them in Drafts.`,
         );
+        const reviewLink = $("generate-review-drafts");
+        if (reviewLink) reviewLink.hidden = false;
         renderDraftsList();
       } catch (error) {
         setSaveStatus("error", error.message || "Generated drafts could not be saved to local SQLite.");
@@ -1484,8 +1524,10 @@
     });
     setSaveStatus(
       "success",
-      `Saved ${additions.length} draft${additions.length === 1 ? "" : "s"} locally. Drafts list updated.`
+      `Saved ${additions.length} draft${additions.length === 1 ? "" : "s"} locally. Review them in Drafts.`
     );
+    const reviewLink = $("generate-review-drafts");
+    if (reviewLink) reviewLink.hidden = false;
     renderDraftsList();
   }
 

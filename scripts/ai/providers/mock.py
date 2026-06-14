@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
 
+from scripts.ai.platform_limits import caption_limit_for
 from scripts.ai.providers.base import AIProvider
 from scripts.ai.schemas import (
     AIStructuredGenerationRequest,
@@ -184,6 +186,57 @@ def _build_variant(label: str, caption: str, suffix: str, max_caption_length: in
     return CaptionVariant(text=text, style=label)
 
 
+def _build_short_caption(caption: str) -> str:
+    if len(caption) > 110:
+        return caption[:107].rstrip() + "..."
+    return caption
+
+
+def _build_long_caption(caption: str, angle: str) -> str:
+    note = _ANGLE_NOTE.get(angle, _ANGLE_NOTE["other"])
+    return f"{caption}\n\nMore detail: {note}"
+
+
+def _build_alt_text(angle: str, media_ids: list[str]) -> str | None:
+    if not media_ids:
+        return None
+    readable_angle = angle.replace("_", " ")
+    return f"Image describing a recent {readable_angle} moment."
+
+
+# Deterministic per-platform scheduling hints. No clock reads: an anchor
+# date keeps preview output stable across runs and mirrors the browser
+# fallback in apps/web/generate.js.
+_SUGGESTED_DAY_OFFSET = {
+    "instagram": 1,
+    "facebook": 2,
+    "threads": 1,
+    "tiktok": 3,
+    "youtube": 4,
+    "linkedin": 5,
+    "x": 1,
+}
+_SUGGESTED_HOUR = {
+    "instagram": 16,
+    "facebook": 13,
+    "threads": 18,
+    "tiktok": 19,
+    "youtube": 11,
+    "linkedin": 9,
+    "x": 8,
+}
+_SUGGESTED_ANCHOR = datetime(2026, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+
+def _suggested_post_time(platform: str, index: int) -> str:
+    offset_days = _SUGGESTED_DAY_OFFSET.get(platform, 1) + index // 7
+    hour = _SUGGESTED_HOUR.get(platform, 12)
+    scheduled = (_SUGGESTED_ANCHOR + timedelta(days=offset_days)).replace(
+        hour=hour, minute=0, second=0, microsecond=0
+    )
+    return scheduled.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
 def _collect_media_ids(media_assets: list[dict[str, Any]]) -> list[str]:
     ids: list[str] = []
     for asset in media_assets:
@@ -260,7 +313,12 @@ class MockProvider(AIProvider):
         media_ids = _collect_media_ids(input.selected_media_assets)
 
         drafts: list[PlatformPostDraft] = []
-        for platform in input.selected_platforms:
+        for index, platform in enumerate(input.selected_platforms):
+            # Never produce a caption longer than the platform allows. Respect a
+            # tighter caller-supplied cap when one is set.
+            platform_caption_limit = caption_limit_for(platform)
+            if options.max_caption_length:
+                platform_caption_limit = min(platform_caption_limit, options.max_caption_length)
             caption = _build_caption(
                 platform=platform,
                 business_name=business_name,
@@ -271,16 +329,16 @@ class MockProvider(AIProvider):
                 goal=input.content_goal,
                 angle=input.content_angle,
                 instructions=input.user_instructions,
-                max_caption_length=options.max_caption_length,
+                max_caption_length=platform_caption_limit,
             )
             variants: list[CaptionVariant] = []
             if options.number_of_variants > 0:
                 variant_styles = ("short", "warm", "direct")
-                for index in range(options.number_of_variants):
-                    style = variant_styles[index % len(variant_styles)]
-                    suffix = f"({style} variation #{index + 1})"
+                for variant_index in range(options.number_of_variants):
+                    style = variant_styles[variant_index % len(variant_styles)]
+                    suffix = f"({style} variation #{variant_index + 1})"
                     variants.append(
-                        _build_variant(style, caption, suffix, options.max_caption_length)
+                        _build_variant(style, caption, suffix, platform_caption_limit)
                     )
             hashtags = (
                 _build_hashtags(
@@ -303,6 +361,11 @@ class MockProvider(AIProvider):
                     hook=_build_hook(platform, business_name, input.content_angle),
                     headline=f"{business_name}: {input.content_angle.replace('_', ' ').title()}",
                     caption=caption,
+                    short_caption=_build_short_caption(caption),
+                    long_caption=_maybe_truncate(
+                        _build_long_caption(caption, input.content_angle),
+                        platform_caption_limit,
+                    ),
                     hashtags=hashtags,
                     media_asset_ids=list(media_ids),
                     caption_variants=variants,
@@ -310,6 +373,8 @@ class MockProvider(AIProvider):
                     content_goal=input.content_goal,
                     content_angle=input.content_angle,
                     target_audience=audience,
+                    suggested_post_time=_suggested_post_time(platform, index),
+                    alt_text=_build_alt_text(input.content_angle, list(media_ids)),
                     notes="Generated by MockProvider. Deterministic. Not a real post.",
                     status="needs_review",
                 )
