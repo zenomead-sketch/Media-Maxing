@@ -41,7 +41,7 @@ Supported local queue statuses:
 
 `ready`, `mock_published`, and `manually_exported` are local states only. They must not be described as real platform publishing.
 
-`platform_published` means a guarded real platform action completed and wrote an audit trail. In this build, that state is only expected from the guarded Facebook Page text-post path.
+`platform_published` means a guarded real platform action completed and wrote an audit trail. In this build, that state is only expected from the guarded Facebook Page text or single-image post path.
 
 ## Preflight
 

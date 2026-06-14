@@ -8,7 +8,7 @@ This project has a local-first MVP foundation with a static web shell, SQLite
 services, and a localhost bridge. It does not publish real posts, send real
 replies, or connect real platform APIs by default.
 
-Real publishing remains disabled by default. A guarded Facebook Page text-post path exists for personal local testing only when explicit flags, Page permissions, preflight, and typed confirmation all pass.
+Real publishing remains disabled by default. A guarded Facebook Page text or single-image post path exists for personal local testing only when explicit flags, Page permissions, preflight, and typed confirmation all pass.
 
 ## Quick Start
 
@@ -112,7 +112,7 @@ Manual Export is the safe posting path. It creates local posting packages and do
 
 ## Safety statement
 
-The app is designed around approval required, local-first data, mock mode, manual export, and emergency pause. Real reply sending is not implemented. Real publishing is disabled by default; the only current real publish path is guarded Facebook Page text posting for personal testing, with explicit environment flags, preflight, a connected Page, typed confirmation, audit logs, and tests.
+The app is designed around approval required, local-first data, mock mode, manual export, and emergency pause. Real reply sending is not implemented. Real publishing is disabled by default; the only current real publish path is guarded Facebook Page text or single-image posting for personal testing, with explicit environment flags, preflight, a connected Page, typed confirmation, audit logs, and tests.
 
 ## Final handoff docs
 
@@ -424,7 +424,7 @@ Real provider keys and platform credentials are optional future configuration va
 
 Non-negotiable safety rules:
 
-- No broad real publishing yet. Only guarded Facebook Page text posting is available for personal local testing after explicit setup.
+- No broad real publishing yet. Only guarded Facebook Page text or single-image posting is available for personal local testing after explicit setup.
 - No real comment replies or DMs yet.
 - No auto-replies.
 - No scraping.
@@ -466,7 +466,7 @@ Current status:
 - Local Publish Queue action service exists for marking manually exported and mock-publish transitions.
 - Social connector registry, mock OAuth scaffolding, Connected Accounts UI, token safety helpers, Meta connector scaffolds, account-aware preflight, and Social Integration Setup helper exist.
 - Integration feature flag validation and a safe server-only platform HTTP client foundation exist for future OAuth/provider work.
-- Guarded Meta OAuth token exchange readiness exists behind explicit safety flags and mocked-test coverage; mock mode remains default, and guarded Facebook Page text posting is the only real publish path.
+- Guarded Meta OAuth token exchange readiness exists behind explicit safety flags and mocked-test coverage; mock mode remains default, and guarded Facebook Page text or single-image posting is the only real publish path.
 - Meta account discovery and connector health checks now exist as safe scaffolding with mocked-test coverage; real API discovery is not called by default.
 - YouTube connector scaffolding now supports mock OAuth/channel health readiness; video upload and publishing remain disabled.
 - TikTok connector scaffolding now supports mock OAuth/profile health readiness; video posting remains disabled.

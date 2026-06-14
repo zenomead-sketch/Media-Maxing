@@ -508,7 +508,7 @@
       realPublishingEnabled: false,
       futureRealPublishingEligible: false,
       status: "disabled_by_policy",
-      message: "Real publishing is locked by default. Facebook text posts require explicit flags and typed confirmation.",
+      message: "Real publishing is locked by default. Facebook text or single-image posts require explicit flags and typed confirmation.",
     },
     replySafety: {
       realReplySendingEnabled: false,

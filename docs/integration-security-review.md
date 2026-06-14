@@ -2,7 +2,7 @@
 
 This review summarizes the Batch 6 security posture for future social integrations. It is written for local development and handoff. It is not a production security certification.
 
-Real publishing remains disabled by default. The only current exception is guarded Facebook Page text posting for personal local testing after explicit flags, preflight, a connected Page token, emergency pause off, and typed confirmation.
+Real publishing remains disabled by default. The only current exception is guarded Facebook Page text or single-image posting for personal local testing after explicit flags, preflight, a connected Page token, emergency pause off, and typed confirmation.
 
 ## Protected Secrets
 

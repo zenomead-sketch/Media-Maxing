@@ -28,12 +28,24 @@ FACEBOOK_REAL_PUBLISH_REQUIRED_SCOPES = {
     "pages_read_engagement",
     "pages_manage_posts",
 }
+FACEBOOK_SUPPORTED_IMAGE_MIME_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+FACEBOOK_MAX_IMAGE_BYTES = 25 * 1024 * 1024
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 class FacebookPublishingError(ValueError):
     def __init__(self, message: str, error_codes: list[str] | None = None):
         super().__init__(message)
         self.error_codes = error_codes or []
+
+
+@dataclass(frozen=True)
+class FacebookPublishMedia:
+    mediaAssetId: str
+    path: Path
+    filename: str
+    contentType: str
+    content: bytes
 
 
 @dataclass(frozen=True)
@@ -54,9 +66,9 @@ class FacebookPublishResult:
 class FacebookPublishingService:
     """Strictly gated real Facebook Page publishing.
 
-    This service is intentionally one-platform and one-action: approved,
-    preflighted Facebook text posts only. It does not publish images, videos,
-    comments, DMs, or any other platform.
+    This service is intentionally one-platform and narrow: approved,
+    preflighted Facebook Page text posts or single-image photo posts only. It
+    does not publish videos, albums, comments, DMs, or any other platform.
     """
 
     def __init__(
@@ -101,6 +113,7 @@ class FacebookPublishingService:
         account_row = self._require_account(preflight.matchedSocialAccountId)
         self._validate_account(account_row)
         page_token = self._require_page_token(account_row["id"])
+        publish_media = self._resolve_publish_media(scheduled_row)
 
         now = _now_utc()
         attempt_id = str(uuid.uuid4())
@@ -114,14 +127,29 @@ class FacebookPublishingService:
             provider_response={},
         )
         try:
-            action = get_connector("facebook").publishText(
-                {
-                    "pageId": account_row["platform_account_id"],
-                    "message": scheduled_row["caption_snapshot"],
-                    "pageAccessToken": page_token,
-                },
-                http_client_config=self.http_client_config,
-            )
+            if publish_media:
+                action = get_connector("facebook").publishImage(
+                    {
+                        "pageId": account_row["platform_account_id"],
+                        "message": scheduled_row["caption_snapshot"],
+                        "pageAccessToken": page_token,
+                        "imageBytes": publish_media.content,
+                        "filename": publish_media.filename,
+                        "contentType": publish_media.contentType,
+                    },
+                    http_client_config=self.http_client_config,
+                )
+                publish_kind = "facebook_photo"
+            else:
+                action = get_connector("facebook").publishText(
+                    {
+                        "pageId": account_row["platform_account_id"],
+                        "message": scheduled_row["caption_snapshot"],
+                        "pageAccessToken": page_token,
+                    },
+                    http_client_config=self.http_client_config,
+                )
+                publish_kind = "facebook_text"
         except Exception as error:
             self._finish_failed_attempt(
                 attempt_id,
@@ -158,8 +186,19 @@ class FacebookPublishingService:
             permalink=permalink,
             actor_label=actor_label,
             provider_response=action.metadata,
+            publish_kind=publish_kind,
+            media_asset_ids=[publish_media.mediaAssetId] if publish_media else [],
             completed_at=now,
         )
+        warnings = [
+            "no_auto_publish: This was triggered by explicit local confirmation.",
+        ]
+        if publish_media:
+            warnings.append(
+                "facebook_single_image: One linked local image was uploaded with the generated caption."
+            )
+        else:
+            warnings.append("facebook_text_only: No linked image was included in this publish.")
         return FacebookPublishResult(
             success=True,
             queueItemId=queue_row["id"],
@@ -171,10 +210,7 @@ class FacebookPublishingService:
             publishedPostId=published_post_id,
             externalPostId=external_post_id,
             permalink=permalink,
-            warnings=[
-                "facebook_text_only: Only Facebook Page text posting is implemented.",
-                "no_auto_publish: This was triggered by explicit local confirmation.",
-            ],
+            warnings=warnings,
         )
 
     def _validate_environment(self) -> None:
@@ -304,6 +340,73 @@ class FacebookPublishingService:
             )
         return token
 
+    def _resolve_publish_media(self, scheduled_row: sqlite3.Row) -> FacebookPublishMedia | None:
+        media_ids = _decode_json(
+            scheduled_row["media_asset_ids_json"] or scheduled_row["media_snapshot_json"],
+            [],
+        )
+        if not media_ids:
+            return None
+        media_ids = [str(media_id).strip() for media_id in media_ids if str(media_id).strip()]
+        if not media_ids:
+            return None
+        if len(media_ids) > 1:
+            raise FacebookPublishingError(
+                "Facebook real publishing currently supports one linked image per post. Use Manual Export for multi-image posts.",
+                ["facebook_multiple_media_not_supported"],
+            )
+        media_id = media_ids[0]
+        with closing(sqlite3.connect(self.database_path)) as connection:
+            connection.row_factory = sqlite3.Row
+            row = connection.execute(
+                """
+                SELECT id, media_type, original_path, file_name, mime_type, file_size_bytes
+                FROM media_assets
+                WHERE id = ?
+                """,
+                (media_id,),
+            ).fetchone()
+        if row is None:
+            raise FacebookPublishingError(
+                "Linked media asset was not found.",
+                ["media_asset_not_found"],
+            )
+        mime_type = str(row["mime_type"] or "").strip().lower()
+        if row["media_type"] != "image" or not mime_type.startswith("image/"):
+            raise FacebookPublishingError(
+                "Facebook real publishing currently supports image media only. Use Manual Export for videos or other files.",
+                ["facebook_media_type_not_supported"],
+            )
+        if mime_type not in FACEBOOK_SUPPORTED_IMAGE_MIME_TYPES:
+            raise FacebookPublishingError(
+                "Facebook real publishing does not support this local image type yet.",
+                ["facebook_image_mime_not_supported"],
+            )
+        source_path = _resolve_local_path(row["original_path"])
+        if not source_path.exists() or not source_path.is_file():
+            raise FacebookPublishingError(
+                "Linked media file is missing from local storage.",
+                ["media_file_missing"],
+            )
+        size_bytes = source_path.stat().st_size
+        if size_bytes <= 0:
+            raise FacebookPublishingError(
+                "Linked media file is empty.",
+                ["media_file_empty"],
+            )
+        if size_bytes > FACEBOOK_MAX_IMAGE_BYTES:
+            raise FacebookPublishingError(
+                "Linked image is too large for the current guarded Facebook upload path.",
+                ["facebook_image_too_large"],
+            )
+        return FacebookPublishMedia(
+            mediaAssetId=media_id,
+            path=source_path,
+            filename=str(row["file_name"] or source_path.name),
+            contentType=mime_type,
+            content=source_path.read_bytes(),
+        )
+
     def _insert_attempt(
         self,
         attempt_id: str,
@@ -379,6 +482,8 @@ class FacebookPublishingService:
         permalink: str | None,
         actor_label: str,
         provider_response: dict[str, Any],
+        publish_kind: str,
+        media_asset_ids: list[str],
         completed_at: str,
     ) -> None:
         with closing(sqlite3.connect(self.database_path)) as connection:
@@ -416,6 +521,8 @@ class FacebookPublishingService:
                             "source": "facebook_publishing_service",
                             "attemptId": attempt_id,
                             "pageId": scheduled_row["platform_account_id"],
+                            "publishKind": publish_kind,
+                            "mediaAssetIds": media_asset_ids,
                             "realPublishing": True,
                             "autoPublish": False,
                         }
@@ -437,6 +544,8 @@ class FacebookPublishingService:
                     _safe_json(
                         {
                             "source": "facebook_connector",
+                            "publishKind": publish_kind,
+                            "mediaAssetIds": media_asset_ids,
                             "externalPostId": external_post_id,
                             "permalink": permalink,
                             "providerResponse": provider_response.get("providerResponse"),
@@ -456,13 +565,15 @@ class FacebookPublishingService:
                     str(uuid.uuid4()),
                     scheduled_row["id"],
                     actor_label,
-                    "Facebook Page text post published after explicit local confirmation.",
+                    "Facebook Page post published after explicit local confirmation.",
                     _safe_json(
                         {
                             "publishQueueItemId": queue_row["id"],
                             "previousQueueStatus": queue_row["queue_status"],
                             "queueStatus": "platform_published",
                             "scheduledPostStatus": "completed",
+                            "publishKind": publish_kind,
+                            "mediaAssetIds": media_asset_ids,
                             "publishedPostId": published_post_id,
                             "externalPostId": external_post_id,
                         }
@@ -531,3 +642,12 @@ def _decode_json(raw_value: str | None, fallback: Any) -> Any:
 
 def _optional_text(value: Any) -> str | None:
     return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _resolve_local_path(path_value: str | None) -> Path:
+    if not path_value:
+        return REPO_ROOT / "__missing__"
+    path = Path(path_value).expanduser()
+    if path.is_absolute():
+        return path.resolve()
+    return (REPO_ROOT / path).resolve()

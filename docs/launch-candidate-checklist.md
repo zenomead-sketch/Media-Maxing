@@ -28,7 +28,7 @@ The launch check creates a throwaway local database if you pass `--database`, se
 - **Partial**: Core safety and local workflows pass, but a non-blocking item is still documented, such as no production desktop installer.
 - **Fail**: A workflow, safety gate, security scan, or test command fails. Do not treat the app as a launch candidate until fixed.
 
-Real publishing remains disabled by default in all launch-candidate states. Guarded Facebook Page text posting is allowed only when explicitly configured and confirmed.
+Real publishing remains disabled by default in all launch-candidate states. Guarded Facebook Page text or single-image posting is allowed only when explicitly configured and confirmed.
 
 ## Install and Setup
 

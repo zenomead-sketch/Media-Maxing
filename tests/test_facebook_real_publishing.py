@@ -55,6 +55,7 @@ class FacebookRealPublishingTest(unittest.TestCase):
         preflight_status: str = "passed",
         account_status: str = "connected",
         token_mode: str = "insecure_dev_only",
+        media_asset_ids: list[str] | None = None,
     ) -> tuple[str, str, str, str]:
         account_id = create_mock_social_account(
             db_path,
@@ -102,10 +103,14 @@ class FacebookRealPublishingTest(unittest.TestCase):
                 """
                 INSERT INTO generated_posts (
                   id, brand_profile_id, platform, caption, approval_status,
-                  safety_flags_json, generation_provider
-                ) VALUES (?, 'brand-facebook', 'facebook', ?, 'approved', '[]', 'mock')
+                  safety_flags_json, generation_provider, media_asset_ids_json
+                ) VALUES (?, 'brand-facebook', 'facebook', ?, 'approved', '[]', 'mock', ?)
                 """,
-                (draft_id, "Approved Facebook post ready for real publish."),
+                (
+                    draft_id,
+                    "Approved Facebook post ready for real publish.",
+                    _json(media_asset_ids or []),
+                ),
             )
             connection.execute(
                 """
@@ -124,6 +129,11 @@ class FacebookRealPublishingTest(unittest.TestCase):
                     "fb-page-123",
                 ),
             )
+            if media_asset_ids:
+                connection.execute(
+                    "UPDATE scheduled_posts SET media_asset_ids_json = ? WHERE id = ?",
+                    (_json(media_asset_ids), scheduled_id),
+                )
             connection.execute(
                 """
                 INSERT INTO publish_queue_items (
@@ -148,6 +158,34 @@ class FacebookRealPublishingTest(unittest.TestCase):
             )
             connection.commit()
         return draft_id, scheduled_id, queue_id, account_id
+
+    def _insert_media_asset(
+        self,
+        db_path: Path,
+        *,
+        media_id: str,
+        path: Path,
+        media_type: str = "image",
+        mime_type: str = "image/jpeg",
+    ) -> None:
+        with closing(sqlite3.connect(db_path)) as connection:
+            connection.execute(
+                """
+                INSERT INTO media_assets (
+                  id, media_type, original_path, file_name, mime_type,
+                  file_size_bytes, tags_json, job_context_json, metadata_json
+                ) VALUES (?, ?, ?, ?, ?, ?, '[]', '{}', '{}')
+                """,
+                (
+                    media_id,
+                    media_type,
+                    str(path),
+                    path.name,
+                    mime_type,
+                    path.stat().st_size if path.exists() else 0,
+                ),
+            )
+            connection.commit()
 
     def _env(self, **overrides: str) -> dict[str, str]:
         values = {
@@ -298,6 +336,104 @@ class FacebookRealPublishingTest(unittest.TestCase):
         self.assertNotIn("facebook-page-token-must-not-leak", serialized_attempt)
         self.assertIn("facebook_real_publish_completed", audit[0])
         self.assertEqual(draft_id, "draft-facebook-real")
+
+    def test_single_linked_image_publishes_facebook_photo_with_generated_caption(self):
+        db_path = self._database()
+        media_path = db_path.parent / "job-photo.jpg"
+        media_path.write_bytes(b"fake-local-image-bytes")
+        self._insert_media_asset(db_path, media_id="media-facebook-photo", path=media_path)
+        _draft_id, scheduled_id, queue_id, _account_id = self._ready_queue(
+            db_path,
+            media_asset_ids=["media-facebook-photo"],
+        )
+        captured = {}
+
+        def fake_facebook_photo_publish(request, timeout):
+            captured["url"] = request.url
+            captured["headers"] = dict(request.headers)
+            captured["multipartFields"] = dict(getattr(request, "multipartFields", {}) or {})
+            captured["multipartFiles"] = list(getattr(request, "multipartFiles", ()) or ())
+            return PlatformHttpResponse(
+                ok=True,
+                status=200,
+                json={"id": "fb-photo-777", "post_id": "fb-post-from-photo-777"},
+                text='{"id":"fb-photo-777","post_id":"fb-post-from-photo-777"}',
+            )
+
+        with patch.dict(os.environ, self._env(), clear=True):
+            result = FacebookPublishingService(
+                db_path,
+                http_client_config=PlatformHttpClientConfig(
+                    provider="meta",
+                    platform="facebook",
+                    safetyMode=NetworkSafetyMode.ENABLED,
+                    allowNetwork=True,
+                    transport=fake_facebook_photo_publish,
+                ),
+            ).publish_queue_item(
+                queue_id,
+                confirmation_phrase=FACEBOOK_PUBLISH_CONFIRMATION,
+                actor_label="local_owner",
+            )
+
+        self.assertTrue(result.success)
+        self.assertEqual(result.externalPostId, "fb-post-from-photo-777")
+        self.assertIn("/fb-page-123/photos", captured["url"])
+        self.assertEqual(
+            captured["multipartFields"]["message"],
+            "Approved Facebook post ready for real publish.",
+        )
+        self.assertEqual(len(captured["multipartFiles"]), 1)
+        media_file = captured["multipartFiles"][0]
+        self.assertEqual(media_file.fieldName, "source")
+        self.assertEqual(media_file.filename, "job-photo.jpg")
+        self.assertEqual(media_file.contentType, "image/jpeg")
+        self.assertEqual(media_file.content, b"fake-local-image-bytes")
+
+        with closing(sqlite3.connect(db_path)) as connection:
+            published_metadata = connection.execute(
+                "SELECT metadata_json FROM published_posts WHERE scheduled_post_id = ?",
+                (scheduled_id,),
+            ).fetchone()[0]
+            attempt_json = connection.execute(
+                "SELECT provider_response_json FROM publish_attempts WHERE publish_queue_item_id = ?",
+                (queue_id,),
+            ).fetchone()[0]
+
+        self.assertIn("facebook_photo", published_metadata)
+        self.assertIn("media-facebook-photo", published_metadata)
+        self.assertNotIn("facebook-page-token-must-not-leak", attempt_json)
+        self.assertNotIn("fake-local-image-bytes", attempt_json)
+
+    def test_missing_linked_media_file_blocks_before_network_call(self):
+        db_path = self._database()
+        missing_path = db_path.parent / "missing-photo.jpg"
+        self._insert_media_asset(db_path, media_id="media-missing-photo", path=missing_path)
+        self._ready_queue(db_path, media_asset_ids=["media-missing-photo"])
+        called = {"count": 0}
+
+        def fail_if_called(request, timeout):
+            called["count"] += 1
+            raise AssertionError("network should not be called when media file is missing")
+
+        with patch.dict(os.environ, self._env(), clear=True):
+            with self.assertRaises(FacebookPublishingError) as error:
+                FacebookPublishingService(
+                    db_path,
+                    http_client_config=PlatformHttpClientConfig(
+                        provider="meta",
+                        platform="facebook",
+                        safetyMode=NetworkSafetyMode.ENABLED,
+                        allowNetwork=True,
+                        transport=fail_if_called,
+                    ),
+                ).publish_queue_item(
+                    "queue-facebook-real",
+                    confirmation_phrase=FACEBOOK_PUBLISH_CONFIRMATION,
+                )
+
+        self.assertEqual(called["count"], 0)
+        self.assertIn("media_file_missing", error.exception.error_codes)
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ from scripts.services.platform_http_client import (
     NetworkSafetyMode,
     PlatformHttpClient,
     PlatformHttpClientConfig,
+    PlatformHttpFilePart,
     PlatformHttpMethod,
     PlatformHttpRequest,
     PlatformHttpResponse,
@@ -53,6 +54,40 @@ class PlatformHttpClientTest(unittest.TestCase):
         self.assertNotIn("fake-secret-value", serialized)
         self.assertNotIn("long-oauth-code-value-123456789", serialized)
         self.assertIn("grant_type", serialized)
+
+    def test_multipart_file_content_is_redacted_when_network_is_blocked(self):
+        client = PlatformHttpClient(
+            PlatformHttpClientConfig(
+                provider="meta",
+                platform="facebook",
+                safetyMode=NetworkSafetyMode.DISABLED,
+            )
+        )
+
+        response = client.request(
+            PlatformHttpRequest(
+                method=PlatformHttpMethod.POST,
+                url="https://graph.example.local/page/photos",
+                headers={"Authorization": "Bearer secret-page-token"},
+                multipartFields={"message": "Caption for the local image"},
+                multipartFiles=(
+                    PlatformHttpFilePart(
+                        fieldName="source",
+                        filename="job-photo.jpg",
+                        contentType="image/jpeg",
+                        content=b"raw-image-bytes-that-must-not-leak",
+                    ),
+                ),
+            )
+        )
+
+        serialized = json.dumps(response.to_safe_dict())
+        self.assertFalse(response.ok)
+        self.assertEqual(response.error.status, "network_disabled")
+        self.assertIn("job-photo.jpg", serialized)
+        self.assertIn("[BINARY_REDACTED]", serialized)
+        self.assertNotIn("secret-page-token", serialized)
+        self.assertNotIn("raw-image-bytes-that-must-not-leak", serialized)
 
     def test_test_environment_blocks_network_by_default(self):
         with patch.dict(

@@ -51,7 +51,7 @@ Future real OAuth work should use the server-side OAuth state service and token 
 2. Choose **Connect mock** for Facebook or Instagram.
 3. The app creates a fake local account record.
 4. The account appears in the connected account list.
-5. Real publishing remains locked by default. Facebook Page text posting requires the guarded Publish Queue action, explicit flags, preflight, and typed confirmation.
+5. Real publishing remains locked by default. Facebook Page text or single-image posting requires the guarded Publish Queue action, explicit flags, preflight, and typed confirmation.
 
 ## Disconnect Flow
 

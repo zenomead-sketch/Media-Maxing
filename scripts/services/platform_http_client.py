@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import uuid
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -94,6 +95,14 @@ class PlatformHttpResponse:
 
 
 @dataclass(frozen=True)
+class PlatformHttpFilePart:
+    fieldName: str
+    filename: str
+    contentType: str
+    content: bytes
+
+
+@dataclass(frozen=True)
 class PlatformHttpRequest:
     method: PlatformHttpMethod | str
     url: str
@@ -101,6 +110,8 @@ class PlatformHttpRequest:
     headers: dict[str, str] = field(default_factory=dict)
     jsonBody: Any = None
     formBody: dict[str, Any] | None = None
+    multipartFields: dict[str, Any] = field(default_factory=dict)
+    multipartFiles: tuple[PlatformHttpFilePart, ...] = ()
     timeoutSeconds: float | None = None
     mockResponse: PlatformHttpResponse | None = None
 
@@ -251,7 +262,13 @@ class PlatformHttpClient:
         url = _url_with_query(request.url, request.query)
         headers = dict(request.headers)
         data: bytes | None = None
-        if request.formBody is not None:
+        if request.multipartFields or request.multipartFiles:
+            data, content_type = _encode_multipart_body(
+                request.multipartFields,
+                request.multipartFiles,
+            )
+            headers.setdefault("Content-Type", content_type)
+        elif request.formBody is not None:
             data = urllib.parse.urlencode(request.formBody).encode("utf-8")
             headers.setdefault("Content-Type", "application/x-www-form-urlencoded")
         elif request.jsonBody is not None:
@@ -414,7 +431,59 @@ def _safe_request_summary(request: PlatformHttpRequest) -> dict[str, Any]:
         "headers": redact_http_value(request.headers).value,
         "formBody": redact_http_value(request.formBody).value,
         "jsonBody": redact_http_value(request.jsonBody).value,
+        "multipartFields": redact_http_value(request.multipartFields).value,
+        "multipartFiles": [
+            {
+                "fieldName": file.fieldName,
+                "filename": file.filename,
+                "contentType": file.contentType,
+                "sizeBytes": len(file.content),
+                "content": "[BINARY_REDACTED]",
+            }
+            for file in request.multipartFiles
+        ],
     }
+
+
+def _encode_multipart_body(
+    fields: dict[str, Any],
+    files: tuple[PlatformHttpFilePart, ...],
+) -> tuple[bytes, str]:
+    boundary = f"----MediaMaxingBoundary{uuid.uuid4().hex}"
+    chunks: list[bytes] = []
+    for key, value in fields.items():
+        chunks.extend(
+            [
+                f"--{boundary}\r\n".encode("utf-8"),
+                f'Content-Disposition: form-data; name="{_escape_multipart_name(str(key))}"\r\n\r\n'.encode(
+                    "utf-8"
+                ),
+                str(value).encode("utf-8"),
+                b"\r\n",
+            ]
+        )
+    for file in files:
+        chunks.extend(
+            [
+                f"--{boundary}\r\n".encode("utf-8"),
+                (
+                    "Content-Disposition: form-data; "
+                    f'name="{_escape_multipart_name(file.fieldName)}"; '
+                    f'filename="{_escape_multipart_name(file.filename)}"\r\n'
+                ).encode("utf-8"),
+                f"Content-Type: {file.contentType or 'application/octet-stream'}\r\n\r\n".encode(
+                    "utf-8"
+                ),
+                file.content,
+                b"\r\n",
+            ]
+        )
+    chunks.append(f"--{boundary}--\r\n".encode("utf-8"))
+    return b"".join(chunks), f"multipart/form-data; boundary={boundary}"
+
+
+def _escape_multipart_name(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 def _url_with_query(url: str, query: dict[str, Any]) -> str:

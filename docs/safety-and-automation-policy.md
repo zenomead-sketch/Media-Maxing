@@ -57,7 +57,7 @@ For the MVP, the stricter rule is used: editing an approved draft changes its st
 
 Critical safety flags block scheduling and future publishing eligibility. Current critical flags include `invented_testimonial`, `fake_testimonial`, `unsupported_guarantee`, `approval_bypass_attempt`, `missing_approval`, `emergency_pause_enabled`, `emergency_pause_conflict`, `missing_required_brand_claim_support`, `unsupported_claim`, and `private_customer_info_risk`.
 
-Publish queue rows are local readiness records unless a guarded real platform action explicitly completes. Queue statuses such as `ready`, `mock_published`, and `manually_exported` must never be presented as real platform publishing. `platform_published` is reserved for audited guarded actions such as Facebook Page text posting.
+Publish queue rows are local readiness records unless a guarded real platform action explicitly completes. Queue statuses such as `ready`, `mock_published`, and `manually_exported` must never be presented as real platform publishing. `platform_published` is reserved for audited guarded actions such as Facebook Page text or single-image posting.
 
 Manual export packages are local files only. Creating an export package must not call social APIs, upload media, include secrets, or automatically change the queue item to `manually_exported`. The user marks that state only after manually posting or finishing the export workflow.
 

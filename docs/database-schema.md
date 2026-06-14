@@ -475,7 +475,7 @@ Stores local publish queue readiness for scheduled posts. This table separates c
 
 - Queue readiness is local-only.
 - Missing connected accounts should warn for manual export, not block manual export.
-- `ready`, `mock_published`, and `manually_exported` must not be described as real platform publishing. `platform_published` is reserved for an explicitly guarded real platform action such as the Facebook Page text-post path.
+- `ready`, `mock_published`, and `manually_exported` must not be described as real platform publishing. `platform_published` is reserved for an explicitly guarded real platform action such as the Facebook Page text or single-image post path.
 - Emergency pause must block moving items to `ready`, mock publishing, and future real publishing.
 
 ## publish_attempts
