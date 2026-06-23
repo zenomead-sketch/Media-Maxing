@@ -45,6 +45,25 @@ Then open `http://127.0.0.1:8000`.
 
 Start with the Intro Setup Guide or Onboarding for a fresh database, or use seeded demo data to explore the Control Center, Brand Brain, Media Library, Generate, Drafts, Calendar, Publish Queue, Analytics, Engagement Inbox, Safety Center, Backup & Data, and Diagnostics.
 
+## Vercel Static Preview
+
+This repo includes a `vercel.json` for a static Vercel preview. It tells Vercel
+to serve the no-build web shell from `apps/web`, which prevents root-level 404s
+when importing the repository.
+
+Use these Vercel project settings if you configure them manually:
+
+- Framework Preset: `Other`
+- Root Directory: repository root
+- Build Command: empty / none
+- Install Command: empty / none
+- Output Directory: `apps/web`
+
+The Vercel deployment is a browser-only preview. The local SQLite bridge,
+local media files, backups, diagnostics exports, OAuth callbacks, and guarded
+Facebook posting still need the local Python launcher running on your machine.
+Use the local launcher for real local workflows.
+
 ## Launch candidate status
 
 Current status: partial local test release.
