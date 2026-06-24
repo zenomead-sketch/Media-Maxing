@@ -59,10 +59,29 @@ Use these Vercel project settings if you configure them manually:
 - Install Command: empty / none
 - Output Directory: `apps/web`
 
-The Vercel deployment is a browser-only preview. The local SQLite bridge,
-local media files, backups, diagnostics exports, OAuth callbacks, and guarded
-Facebook posting still need the local Python launcher running on your machine.
-Use the local launcher for real local workflows.
+The Vercel deployment is a browser UI preview. To use that deployed UI with
+your real local SQLite data, run the localhost companion server in the
+background on your computer and explicitly allow your Vercel origin:
+
+```env
+LOCAL_API_ALLOWED_ORIGINS=https://your-media-maxing-app.vercel.app
+```
+
+Then start the local companion server:
+
+```text
+python -m scripts.local_beta_launcher --database data/app.sqlite --host 127.0.0.1 --port 8000 --no-browser
+```
+
+Open your Vercel URL with the local API origin:
+
+```text
+https://your-media-maxing-app.vercel.app/?localApiOrigin=http://127.0.0.1:8000#home
+```
+
+The local SQLite bridge, local media files, backups, diagnostics exports, OAuth
+callbacks, and guarded Facebook posting still run on your machine. Vercel serves
+the UI only.
 
 ## Launch candidate status
 

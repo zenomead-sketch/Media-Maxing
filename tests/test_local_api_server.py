@@ -617,6 +617,67 @@ class LocalApiServerTest(unittest.TestCase):
         self.assertIn('<script src="./api-client.js"></script>', html)
         self.assertIn("Local Social AI Manager", html)
 
+    def test_http_server_allows_explicit_vercel_origin_for_local_companion_mode(self):
+        app = self._application()
+        allowed_origin = "https://media-maxing-test.vercel.app"
+        with patch.dict(
+            "os.environ",
+            {"LOCAL_API_ALLOWED_ORIGINS": allowed_origin},
+            clear=False,
+        ):
+            server = LocalApiHttpServer(("127.0.0.1", 0), app)
+            self.addCleanup(server.server_close)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            self.addCleanup(server.shutdown)
+            base_url = f"http://127.0.0.1:{server.server_address[1]}"
+
+            preflight_request = Request(
+                f"{base_url}/api/bootstrap",
+                headers={
+                    "Origin": allowed_origin,
+                    "Access-Control-Request-Method": "GET",
+                },
+                method="OPTIONS",
+            )
+            with urlopen(preflight_request, timeout=5) as response:
+                self.assertEqual(response.status, 204)
+                self.assertEqual(
+                    response.headers["Access-Control-Allow-Origin"],
+                    allowed_origin,
+                )
+
+            request = Request(
+                f"{base_url}/api/health",
+                headers={"Origin": allowed_origin},
+            )
+            with urlopen(request, timeout=5) as response:
+                health = json.loads(response.read().decode("utf-8"))
+                self.assertEqual(
+                    response.headers["Access-Control-Allow-Origin"],
+                    allowed_origin,
+                )
+
+        self.assertTrue(health["ok"])
+
+    def test_http_server_does_not_cors_allow_unlisted_remote_origin(self):
+        app = self._application()
+        server = LocalApiHttpServer(("127.0.0.1", 0), app)
+        self.addCleanup(server.server_close)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.shutdown)
+        request = Request(
+            f"http://127.0.0.1:{server.server_address[1]}/api/health",
+            headers={"Origin": "https://not-your-app.example"},
+        )
+
+        with urlopen(request, timeout=5) as response:
+            health = json.loads(response.read().decode("utf-8"))
+
+        self.assertTrue(health["ok"])
+        self.assertIsNone(response.headers.get("Access-Control-Allow-Origin"))
+
     def test_http_server_serializes_connector_health_safely(self):
         app = self._application()
         server = LocalApiHttpServer(("127.0.0.1", 0), app)

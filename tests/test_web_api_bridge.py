@@ -30,6 +30,9 @@ class WebApiBridgeTest(unittest.TestCase):
         self.assertIn("/api/media/import", self.settings)
         self.assertIn("local-api-ready", self.client)
         self.assertIn("SQLite bridge unavailable; using static local demo adapter.", self.client)
+        self.assertIn("localApiOrigin", self.client)
+        self.assertIn("local-social-ai-manager.localApiOrigin", self.client)
+        self.assertIn("http://127.0.0.1:8000", self.client)
 
     def test_phase7_screens_use_bridge_routes_when_available(self):
         for route in (

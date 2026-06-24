@@ -31,12 +31,65 @@
     diagnostics: "local-social-ai-manager.diagnostics",
     recentErrors: "local-social-ai-manager.recentErrors",
   };
+  const localApiOriginStorageKey = "local-social-ai-manager.localApiOrigin";
+  const defaultLocalApiOrigin = "http://127.0.0.1:8000";
+
+  function isLoopbackHostname(hostname) {
+    return ["127.0.0.1", "localhost", "::1", "[::1]"].includes(String(hostname || "").toLowerCase());
+  }
+
+  function normalizeLocalApiOrigin(origin) {
+    if (!origin) {
+      return "";
+    }
+    try {
+      const parsed = new URL(origin);
+      if (!["http:", "https:"].includes(parsed.protocol)) {
+        return "";
+      }
+      if (!isLoopbackHostname(parsed.hostname)) {
+        return "";
+      }
+      return parsed.origin;
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function readQueryApiOrigin() {
+    try {
+      const params = new URLSearchParams(window.location.search || "");
+      return params.get("localApiOrigin") || params.get("localApi") || "";
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function resolveApiOrigin() {
+    const queryOrigin = normalizeLocalApiOrigin(readQueryApiOrigin());
+    if (queryOrigin) {
+      window.localStorage.setItem(localApiOriginStorageKey, queryOrigin);
+      return queryOrigin;
+    }
+    const storedOrigin = normalizeLocalApiOrigin(
+      window.localStorage.getItem(localApiOriginStorageKey)
+    );
+    if (storedOrigin) {
+      return storedOrigin;
+    }
+    if (
+      (window.location.protocol === "http:" || window.location.protocol === "https:") &&
+      isLoopbackHostname(window.location.hostname)
+    ) {
+      return window.location.origin;
+    }
+    return defaultLocalApiOrigin;
+  }
+
+  const resolvedApiOrigin = resolveApiOrigin();
 
   function apiUrl(path) {
-    if (window.location.protocol === "http:" || window.location.protocol === "https:") {
-      return `${window.location.origin}${path}`;
-    }
-    return `http://127.0.0.1:8000${path}`;
+    return `${bridge.apiOrigin}${path}`;
   }
 
   async function request(path, options = {}) {
@@ -101,6 +154,7 @@
 
   const bridge = {
     available: false,
+    apiOrigin: resolvedApiOrigin,
     snapshot: null,
     request,
     upload,

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+import os
 import sqlite3
 import uuid
 from contextlib import closing
@@ -75,6 +76,9 @@ from scripts.jobs.local_runner import LocalJobRunner
 WEB_ROOT = REPO_ROOT / "apps" / "web"
 MAX_JSON_BODY_BYTES = 256 * 1024
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+LOCAL_API_ALLOWED_ORIGINS_ENV = "LOCAL_API_ALLOWED_ORIGINS"
+CORS_ALLOWED_METHODS = "GET, POST, PATCH, OPTIONS"
+CORS_ALLOWED_HEADERS = "Content-Type, X-Local-Filename"
 
 
 class LocalApiError(RuntimeError):
@@ -816,6 +820,15 @@ class LocalApiApplication:
 class LocalApiRequestHandler(BaseHTTPRequestHandler):
     server_version = "LocalSocialAIManager/0.1"
 
+    def do_OPTIONS(self) -> None:
+        self.send_response(HTTPStatus.NO_CONTENT)
+        self._send_security_headers()
+        self._send_cors_headers()
+        self.send_header("Access-Control-Allow-Methods", CORS_ALLOWED_METHODS)
+        self.send_header("Access-Control-Allow-Headers", CORS_ALLOWED_HEADERS)
+        self.send_header("Access-Control-Max-Age", "600")
+        self.end_headers()
+
     def do_GET(self) -> None:
         if self.path.startswith("/api/"):
             self._handle_api("GET")
@@ -923,7 +936,8 @@ class LocalApiRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(payload)))
         self.send_header("Cache-Control", "no-store")
-        self.send_header("X-Content-Type-Options", "nosniff")
+        self._send_security_headers()
+        self._send_cors_headers()
         self.end_headers()
         self.wfile.write(payload)
 
@@ -933,9 +947,22 @@ class LocalApiRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
-        self.send_header("X-Content-Type-Options", "nosniff")
+        self._send_security_headers()
+        self._send_cors_headers()
         self.end_headers()
         self.wfile.write(body)
+
+    def _send_security_headers(self) -> None:
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Vary", "Origin")
+
+    def _send_cors_headers(self) -> None:
+        origin = self.headers.get("Origin")
+        if not origin or not _origin_is_allowed(origin):
+            return
+        self.send_header("Access-Control-Allow-Origin", _normalize_origin(origin) or origin)
+        self.send_header("Access-Control-Allow-Methods", CORS_ALLOWED_METHODS)
+        self.send_header("Access-Control-Allow-Headers", CORS_ALLOWED_HEADERS)
 
 
 class LocalApiHttpServer(ThreadingHTTPServer):
@@ -1196,6 +1223,39 @@ def _json_safe(value: Any) -> Any:
     if isinstance(value, Path):
         return str(value)
     return value
+
+
+def _origin_is_allowed(origin: str) -> bool:
+    normalized = _normalize_origin(origin)
+    if not normalized:
+        return False
+    if _is_loopback_origin(normalized):
+        return True
+    return normalized in _configured_allowed_origins()
+
+
+def _configured_allowed_origins() -> set[str]:
+    configured = os.environ.get(LOCAL_API_ALLOWED_ORIGINS_ENV, "")
+    origins: set[str] = set()
+    for raw_origin in configured.split(","):
+        normalized = _normalize_origin(raw_origin.strip())
+        if normalized:
+            origins.add(normalized)
+    return origins
+
+
+def _is_loopback_origin(origin: str) -> bool:
+    parsed = urlparse(origin)
+    return parsed.scheme in {"http", "https"} and (parsed.hostname or "") in LOOPBACK_HOSTS
+
+
+def _normalize_origin(origin: str) -> str | None:
+    if not origin:
+        return None
+    parsed = urlparse(origin)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return None
+    return f"{parsed.scheme}://{parsed.netloc.lower()}"
 
 
 def _camelize_keys(value: Any) -> Any:
