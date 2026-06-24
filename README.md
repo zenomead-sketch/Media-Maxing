@@ -70,6 +70,12 @@ LOCAL_API_ALLOWED_ORIGINS=https://your-media-maxing-app.vercel.app
 Then start the local companion server:
 
 ```text
+start-media-maxing-vercel-local.bat
+```
+
+Or run the same companion server directly:
+
+```text
 python -m scripts.local_beta_launcher --database data/app.sqlite --host 127.0.0.1 --port 8000 --no-browser
 ```
 

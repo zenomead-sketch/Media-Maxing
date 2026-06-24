@@ -961,8 +961,6 @@ class LocalApiRequestHandler(BaseHTTPRequestHandler):
         if not origin or not _origin_is_allowed(origin):
             return
         self.send_header("Access-Control-Allow-Origin", _normalize_origin(origin) or origin)
-        self.send_header("Access-Control-Allow-Methods", CORS_ALLOWED_METHODS)
-        self.send_header("Access-Control-Allow-Headers", CORS_ALLOWED_HEADERS)
 
 
 class LocalApiHttpServer(ThreadingHTTPServer):
