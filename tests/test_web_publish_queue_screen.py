@@ -109,6 +109,7 @@ class WebPublishQueueScreenTest(unittest.TestCase):
         self.assertIn("Manual export recorded locally. No external API was called.", self.script)
         self.assertIn("FACEBOOK_PUBLISH_CONFIRMATION", self.script)
         self.assertIn("publish-facebook", self.script)
+        self.assertIn("publishNonce", self.script)
         self.assertIn("Real publishing is only implemented for Facebook", self.script)
         self.assertIn("preflightStatus !== \"passed\"", self.script)
         self.assertIn("queueStatus !== \"ready\"", self.script)

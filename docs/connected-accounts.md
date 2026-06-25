@@ -1,26 +1,29 @@
 # Connected Accounts
 
-Connected Accounts is the local setup area for future social platform integrations.
+Connected Accounts is the local setup area for social platform integrations.
 
-The current build is mock/demo only. It helps a user see which platforms are planned, what account type may be needed, which permissions/scopes are expected later, and whether a local mock account is connected.
+Mock/demo mode remains the default. Facebook can also start a real server-side OAuth flow when the local API, Meta credentials, and real OAuth flags are ready. Guarded Facebook Page text or single-image posting is still separate from connecting: it only runs through Publish Queue after preflight, emergency pause checks, server-side Page token availability, and typed confirmation.
 
 ## What Works Now
 
 - Platform cards exist for Facebook, Instagram, Threads, YouTube, TikTok, LinkedIn, and X.
 - Facebook and Instagram can be mock connected from the browser UI.
-- Mock connected accounts persist in local browser storage.
+- Facebook can start real OAuth from **Connect real** when setup is ready.
+- Mock connected accounts persist locally; localhost mode persists accounts to SQLite through the local API.
 - Disconnect marks a mock account disconnected locally.
 - Check connection validates mock/local health status and records a safe audit event.
 - A small local audit log records mock connect and disconnect events.
 - The UI shows only safe account details.
 - Publish Queue preflight can use connected account status as a local readiness signal.
 
-## What Is Not Real Yet
+## What Is Still Disabled Or Guarded
 
-- No real social platform APIs are called.
-- No real OAuth exchange is performed from the UI.
-- No real publishing is enabled.
-- No comments, replies, analytics, or profile data are fetched.
+- Instagram, Threads, YouTube, TikTok, LinkedIn, and X real posting remain disabled.
+- Facebook real OAuth and Page discovery require explicit flags and server-side local API handling.
+- Facebook real posting is limited to the guarded Publish Queue path for Page text or one linked image.
+- Real comments and replies are not fetched or sent.
+- Broad analytics fetching remains disabled by default; guarded Meta analytics sync is documented separately.
+- Facebook Page discovery can fetch Page profile metadata only after real OAuth setup is enabled.
 - No real credentials are required.
 
 ## Account Statuses
@@ -37,13 +40,13 @@ Connected account records can use these statuses:
 - `error`
 - `requires_reauth`
 
-Only `connected` and some `limited` mock/demo accounts are useful for local readiness display. Expired, revoked, disconnected, error, and requires-reauth accounts do not satisfy future real publishing readiness.
+Only `connected` and some `limited` mock/demo accounts are useful for local readiness display. For guarded Facebook posting, the account must be a real connected Facebook Page with a server-side Page token. Expired, revoked, disconnected, error, and requires-reauth accounts do not satisfy future real publishing readiness.
 
 ## Token Safety
 
 The browser UI must not show or store platform secret values. The current mock connection records use `placeholder_not_stored` for storage mode.
 
-Future real OAuth work should use the server-side OAuth state service and token security service. Frontend responses should only include safe account DTO fields such as display name, platform, status, scopes, and timestamps.
+Real OAuth work uses the server-side OAuth state service and token security service. Today this is usable for the guarded Facebook path when configured; other platforms remain scaffolded. Frontend responses should only include safe account DTO fields such as display name, platform, status, scopes, and timestamps.
 
 ## Mock Connect Flow
 
@@ -52,6 +55,17 @@ Future real OAuth work should use the server-side OAuth state service and token 
 3. The app creates a fake local account record.
 4. The account appears in the connected account list.
 5. Real publishing remains locked by default. Facebook Page text or single-image posting requires the guarded Publish Queue action, explicit flags, preflight, and typed confirmation.
+
+## Real Facebook Connect Flow
+
+1. Finish `docs/facebook-real-use.md`.
+2. Start the local API bridge.
+3. Open Connected Accounts.
+4. Choose **Connect real** for Facebook.
+5. Complete Meta login and allow the Page permissions.
+6. Return to Connected Accounts and choose **Check connection** if needed.
+
+The browser never receives the client secret, raw authorization code, access token, refresh token, or Page token.
 
 ## Disconnect Flow
 
@@ -80,7 +94,8 @@ Connected account status is shown in Publish Queue cards and detail panels.
 Current rules:
 
 - Missing account: warning only for manual export; future real publishing would be blocked.
-- Mock connected account: satisfies mock/demo account checks, but real publishing stays disabled.
+- Mock connected account: satisfies mock/demo account checks, but cannot publish for real.
+- Real connected Facebook Page: can satisfy the guarded Facebook posting account gate only when scopes and server-side Page token storage are available.
 - Expired, revoked, error, or requires-reauth account: warning in the UI and future real publishing blocked.
 - Limited account: shown with missing scopes or setup warnings.
 - Multiple accounts for one platform: the app uses a safe local default and warns that account selection will be needed later.
@@ -89,9 +104,9 @@ Manual export remains the fallback when content preflight passes. No tokens are 
 
 ## Future Work
 
-- Wire the web UI to `apps/api/connect_handlers.py`.
-- Add real OAuth only behind explicit feature flags.
-- Keep publishing disabled until a future real-publishing task adds platform-specific safety gates, tests, and documentation.
+- Add account selection when multiple Facebook Pages are returned.
+- Add secure keychain/encrypted token storage so local development no longer needs explicit insecure dev token mode.
+- Keep every non-Facebook real publishing path disabled until each platform gets its own safety gates, tests, and documentation.
 
 ## How To Test
 

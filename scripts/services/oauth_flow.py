@@ -15,6 +15,7 @@ from urllib.parse import urlencode
 from scripts.connectors.meta.config import load_meta_config
 from scripts.connectors.meta.oauth import (
     SUPPORTED_META_OAUTH_PLATFORMS,
+    build_meta_profile_request,
     build_meta_token_exchange_request,
 )
 from scripts.connectors.registry import (
@@ -35,6 +36,7 @@ from scripts.services.platform_http_client import (
     NetworkSafetyMode,
     PlatformHttpClient,
     PlatformHttpClientConfig,
+    PlatformHttpRequest,
     normalize_provider_error,
 )
 from scripts.services.token_security import TokenSecurityService
@@ -556,18 +558,31 @@ class OAuthFlowService:
                 now=_to_iso(now),
             )
 
+        discovery = (
+            self._discover_and_store_facebook_page(
+                account_id=account_id,
+                config=config,
+                token_payload=token_payload,
+                scopes=scopes,
+                now=now,
+            )
+            if platform == "facebook"
+            else {"connected": False, "warnings": [], "metadata": {"account_discovery": "not_applicable"}}
+        )
+
         self._mark_state(state_row["id"], "consumed", now=now)
+        exchange_status = "succeeded_connected" if discovery["connected"] else "succeeded_limited"
         self._audit(
             platform,
             action="token_exchange",
-            status="succeeded_limited",
+            status=exchange_status,
             message="Meta OAuth token exchange completed through guarded server-side path.",
             social_account_id=account_id,
             safe_metadata={
                 "tokenStorageMode": token_storage.storageMode,
                 "encryptionStatus": token_storage.encryptionStatus,
                 "tokenStored": token_storage.success,
-                "accountDiscovery": "not_implemented",
+                **discovery["metadata"],
                 "longLivedExchange": "not_implemented",
             },
         )
@@ -575,7 +590,11 @@ class OAuthFlowService:
             platform,
             action="oauth_callback",
             status="succeeded",
-            message="Real Meta OAuth callback completed with limited local account metadata.",
+            message=(
+                "Real Meta OAuth callback completed with connected Facebook Page metadata."
+                if discovery["connected"]
+                else "Real Meta OAuth callback completed with limited local account metadata."
+            ),
             social_account_id=account_id,
             safe_metadata={
                 "mode": "real_oauth",
@@ -591,20 +610,32 @@ class OAuthFlowService:
             ),
             None,
         )
+        status = "real_oauth_connected" if discovery["connected"] else "real_oauth_limited_connected"
+        message = (
+            "Meta OAuth token exchange and Facebook Page discovery completed locally. "
+            "Guarded Facebook posting can proceed only after publish flags, preflight, emergency pause, and typed confirmation gates pass."
+            if discovery["connected"]
+            else (
+                "Meta OAuth token exchange completed locally. Account discovery "
+                "is incomplete or token storage is unavailable, so the account is limited and publishing remains disabled."
+            )
+        )
+        warnings = [
+            "long_lived_token_exchange_not_implemented: Only the short-lived token exchange path is scaffolded.",
+            "real_publishing_requires_queue_confirmation: Facebook posting still requires the guarded Publish Queue flow.",
+        ] if discovery["connected"] else [
+            "account_discovery_not_publish_ready: Created or kept a limited account because Page discovery or token persistence was not publish-ready.",
+            "long_lived_token_exchange_not_implemented: Only the short-lived token exchange path is scaffolded.",
+            "real_publishing_disabled_by_policy: No publishing methods were enabled for this account.",
+            *discovery["warnings"],
+        ]
         return OAuthCallbackServiceResult(
             success=True,
             platform=platform,
-            status="real_oauth_limited_connected",
-            message=(
-                "Meta OAuth token exchange completed locally. Account discovery "
-                "is not implemented yet, so the account is limited and publishing remains disabled."
-            ),
+            status=status,
+            message=message,
             account=account,
-            warnings=[
-                "account_discovery_not_implemented: Created a limited account with unknown provider account ID.",
-                "long_lived_token_exchange_not_implemented: Only the short-lived token exchange path is scaffolded.",
-                "real_publishing_disabled_by_policy: No publishing methods were enabled.",
-            ],
+            warnings=warnings,
         )
 
     def disconnect(
@@ -741,6 +772,240 @@ class OAuthFlowService:
             account_id=account_id,
             now=_to_iso(now),
         )
+
+    def _discover_and_store_facebook_page(
+        self,
+        *,
+        account_id: str,
+        config: Any,
+        token_payload: dict[str, Any],
+        scopes: list[str],
+        now: datetime,
+    ) -> dict[str, Any]:
+        user_token = _optional_string(token_payload.get("access_token"))
+        if not user_token:
+            return {
+                "connected": False,
+                "warnings": ["facebook_page_discovery_skipped: OAuth response did not include a user token."],
+                "metadata": {"account_discovery": "skipped_missing_user_token"},
+            }
+
+        profile_request = build_meta_profile_request(config=config, platform="facebook")
+        request = PlatformHttpRequest(
+            method=profile_request.method,
+            url=profile_request.url,
+            query=profile_request.query,
+            headers={**profile_request.headers, "Authorization": f"Bearer {user_token}"},
+            jsonBody=profile_request.jsonBody,
+            formBody=profile_request.formBody,
+            timeoutSeconds=profile_request.timeoutSeconds,
+            mockResponse=profile_request.mockResponse,
+        )
+        response = PlatformHttpClient(
+            self.http_client_config
+            or PlatformHttpClientConfig(
+                provider="meta",
+                platform="facebook",
+                allowNetwork=False,
+            )
+        ).request(request)
+        if not response.ok:
+            provider_error = normalize_provider_error(
+                provider="meta",
+                platform="facebook",
+                status=response.status,
+                payload=response.json,
+                raw_text=response.text,
+            )
+            return {
+                "connected": False,
+                "warnings": [f"facebook_page_discovery_failed: {provider_error.userSafeMessage}"],
+                "metadata": {
+                    "account_discovery": "failed",
+                    "providerStatus": provider_error.status,
+                    "errorCode": provider_error.code,
+                    "requiresReauth": provider_error.requiresReauth,
+                    "rateLimited": provider_error.rateLimited,
+                },
+            }
+
+        payload = response.json if isinstance(response.json, dict) else {}
+        page = _facebook_primary_page_payload(payload)
+        page_id = _optional_string(page.get("id"))
+        display_name = _optional_string(page.get("name") or page.get("display_name"))
+        username = _optional_string(page.get("username"))
+        page_token = _optional_string(page.get("access_token"))
+        if not page_id or not display_name:
+            return {
+                "connected": False,
+                "warnings": [
+                    "facebook_page_discovery_incomplete: Meta did not return a Page ID and name."
+                ],
+                "metadata": {"account_discovery": "incomplete"},
+            }
+        if not page_token:
+            self._update_facebook_page_account(
+                account_id=account_id,
+                page_id=page_id,
+                display_name=display_name,
+                username=username,
+                scopes=scopes,
+                connection_status="limited",
+                requires_reauth=True,
+                now=now,
+            )
+            return {
+                "connected": False,
+                "warnings": [
+                    "facebook_page_token_missing: Meta returned Page metadata without a Page access token."
+                ],
+                "metadata": {
+                    "account_discovery": "page_without_token",
+                    "pageId": page_id,
+                    "pageTokenStored": False,
+                },
+            }
+
+        token_metadata = _token_payload_for_storage(token_payload, now=now)
+        page_storage = TokenSecurityService(self.database_path).store_token_set(
+            social_account_id=account_id,
+            platform="facebook",
+            token_type="page_access",
+            token_set={
+                "access_token": page_token,
+                "access_token_expires_at": token_metadata.get("access_token_expires_at"),
+                "scope": " ".join(scopes),
+            },
+        )
+        if not page_storage.success:
+            if page_storage.encryptionStatus == "placeholder_not_stored":
+                create_placeholder_platform_token(
+                    self.database_path,
+                    social_account_id=account_id,
+                    platform="facebook",
+                    token_type="page_access",
+                    scope=" ".join(scopes),
+                    now=_to_iso(now),
+                )
+            self._update_facebook_page_account(
+                account_id=account_id,
+                page_id=page_id,
+                display_name=display_name,
+                username=username,
+                scopes=scopes,
+                connection_status="limited",
+                requires_reauth=True,
+                now=now,
+            )
+            return {
+                "connected": False,
+                "warnings": [
+                    "facebook_page_token_not_stored: Page discovery worked, but token storage is not available for real posting."
+                ],
+                "metadata": {
+                    "account_discovery": "page_discovered_token_not_stored",
+                    "pageId": page_id,
+                    "pageTokenStored": False,
+                    "pageTokenStorageMode": page_storage.storageMode,
+                    "pageTokenEncryptionStatus": page_storage.encryptionStatus,
+                },
+            }
+
+        self._update_facebook_page_account(
+            account_id=account_id,
+            page_id=page_id,
+            display_name=display_name,
+            username=username,
+            scopes=scopes,
+            connection_status="connected",
+            requires_reauth=False,
+            now=now,
+        )
+        self._audit(
+            "facebook",
+            action="connection_validate",
+            status="healthy",
+            message="Facebook Page discovery completed and Page token metadata was stored server-side.",
+            social_account_id=account_id,
+            safe_metadata={
+                "account_discovery": "facebook_page_discovered",
+                "pageId": page_id,
+                "displayName": display_name,
+                "pageTokenStored": True,
+                "pageTokenStorageMode": page_storage.storageMode,
+                "pageTokenEncryptionStatus": page_storage.encryptionStatus,
+            },
+        )
+        return {
+            "connected": True,
+            "warnings": [],
+            "metadata": {
+                "account_discovery": "facebook_page_discovered",
+                "pageId": page_id,
+                "pageTokenStored": True,
+                "pageTokenStorageMode": page_storage.storageMode,
+                "pageTokenEncryptionStatus": page_storage.encryptionStatus,
+            },
+        }
+
+    def _update_facebook_page_account(
+        self,
+        *,
+        account_id: str,
+        page_id: str,
+        display_name: str,
+        username: str | None,
+        scopes: list[str],
+        connection_status: str,
+        requires_reauth: bool,
+        now: datetime,
+    ) -> None:
+        timestamp = _to_iso(now)
+        capabilities = {
+            "canConnect": True,
+            "canReadProfile": True,
+            "canPublishText": True,
+            "canPublishImage": True,
+            "canPublishVideo": False,
+            "supportsManualExportFallback": True,
+            "realOAuth": True,
+            "facebookPageDiscovery": True,
+            "guardedFacebookPublishing": connection_status == "connected",
+        }
+        with closing(sqlite3.connect(self.database_path)) as connection:
+            connection.execute(
+                """
+                UPDATE social_accounts
+                SET platform_account_id = ?,
+                    display_name = ?,
+                    username = ?,
+                    account_type = 'page',
+                    connection_status = ?,
+                    capabilities_json = ?,
+                    granted_scopes_json = ?,
+                    missing_scopes_json = '[]',
+                    requires_reauth = ?,
+                    last_connected_at = ?,
+                    last_validated_at = ?,
+                    updated_at = ?
+                WHERE id = ?
+                  AND platform = 'facebook'
+                """,
+                (
+                    page_id,
+                    display_name,
+                    username,
+                    connection_status,
+                    json.dumps(capabilities, sort_keys=True),
+                    json.dumps(scopes, sort_keys=True),
+                    1 if requires_reauth else 0,
+                    timestamp if connection_status == "connected" else None,
+                    timestamp,
+                    timestamp,
+                    account_id,
+                ),
+            )
+            connection.commit()
 
     def _find_state(self, platform: str, state_hash: str) -> sqlite3.Row | None:
         with closing(sqlite3.connect(self.database_path)) as connection:
@@ -966,3 +1231,16 @@ def _token_payload_for_storage(
 
         result["access_token_expires_at"] = _to_iso(now + timedelta(seconds=expires_in))
     return result
+
+
+def _facebook_primary_page_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    data = payload.get("data")
+    if isinstance(data, list):
+        for candidate in data:
+            if isinstance(candidate, dict) and (
+                _optional_string(candidate.get("id"))
+                or _optional_string(candidate.get("name"))
+            ):
+                return candidate
+        return {}
+    return payload

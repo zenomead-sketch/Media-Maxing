@@ -28,7 +28,7 @@ Preflight returns:
 - `missingScopes`: scopes that may be required before future real publishing.
 - `requiresReauth`: whether the matched account needs reconnect.
 - `connectionStatus`: stored account connection status.
-- `realPublishingEligible`: always false in this build because real publishing is disabled by policy.
+- `realPublishingEligible`: false for all platforms by default. It can become true only for the guarded Facebook Page text/single-image path when content passes preflight, the connected Page is ready, and explicit real Facebook flags are enabled.
 - `manualExportEligible`: true when local content preflight has no blocking errors.
 - `mockPublishEligible`: true only in mock mode when local content preflight has no blocking errors.
 
@@ -160,7 +160,7 @@ The preflight service checks:
 - Manual export is allowed without a connected account when all content checks pass.
 - Mock publish can be eligible in mock mode without requiring a real connected account.
 - Future real publishing requires a matching connected account, required scopes, and no reauth requirement.
-- Future real publishing remains disabled in this build even when a mock account is connected.
+- Broad real publishing remains disabled. Mock accounts never satisfy guarded Facebook Page publishing, even when the rest of the content passes preflight.
 - Missing accounts, missing scopes, and reconnect needs are shown clearly so the user can prepare for later integrations.
 
 ## Current Limitations

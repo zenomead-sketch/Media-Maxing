@@ -14,6 +14,8 @@
   const SETTINGS_KEY = "local-social-ai-manager.settings";
   const MANUAL_SOURCE = "manual";
   const MOCK_SOURCE = "mock";
+  const PLATFORM_API_SOURCE = "platform_api";
+  let selectedAnalyticsPostKey = "";
   const platformIds = ["facebook", "instagram", "threads", "youtube", "tiktok", "linkedin", "x"];
   const numericFields = [
     "impressions",
@@ -97,6 +99,25 @@
 
   function formatStatus(value) {
     return String(value || "-").replace(/_/g, " ");
+  }
+
+  function formatSourceLabel(value) {
+    if (value === PLATFORM_API_SOURCE) return "Real Meta sync";
+    if (value === MOCK_SOURCE) return "Mock Data";
+    if (value === MANUAL_SOURCE) return "Manual Entry";
+    return formatStatus(value);
+  }
+
+  function sourceStatusClass(value) {
+    if (value === PLATFORM_API_SOURCE) return "real-sync";
+    if (value === MOCK_SOURCE) return "mock-mode";
+    return "local-only";
+  }
+
+  function formatDateTime(value) {
+    if (!value) return "-";
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
   }
 
   function formatEvidence(value) {
@@ -185,6 +206,30 @@
     const savedDrafts = safeParse(window.localStorage.getItem(DRAFTS_KEY), []);
     const posts = defaultTrackedPosts();
     const seen = new Set(posts.map((post) => post.id));
+    const snapshots = safeParse(window.localStorage.getItem(ANALYTICS_SNAPSHOTS_KEY), []);
+    if (Array.isArray(snapshots)) {
+      snapshots.forEach((snapshot) => {
+        const raw = snapshot?.rawMetrics || snapshot?.raw_metrics || {};
+        const postId = snapshot?.publishedPostId || snapshot?.generatedPostId || raw.externalPostId;
+        if (postId && !seen.has(postId)) {
+          posts.push({
+            id: postId,
+            platform: snapshot.platform || "facebook",
+            headline: raw.caption ? `${formatStatus(snapshot.platform)} platform post` : "Synced platform post",
+            hook: raw.caption || "Synced platform post",
+            caption: raw.caption || snapshot.notes || "",
+            contentGoal: "platform_api",
+            contentAngle: "platform_synced",
+            postedAt: raw.postedAt || snapshot.snapshotDate || snapshot.createdAt,
+            linkTarget: raw.permalink || "#analytics",
+            permalink: raw.permalink || "",
+            media: Array.isArray(raw.media) ? raw.media : [],
+            source: PLATFORM_API_SOURCE,
+          });
+          seen.add(postId);
+        }
+      });
+    }
     if (Array.isArray(savedDrafts)) {
       savedDrafts.forEach((draft) => {
         if (draft?.id && !seen.has(draft.id)) {
@@ -223,12 +268,15 @@
     });
     return {
       id: snapshot.id,
+      publishedPostId: snapshot.publishedPostId,
+      scheduledPostId: snapshot.scheduledPostId,
       generatedPostId: snapshot.generatedPostId,
       platform: platformIds.includes(snapshot.platform) ? snapshot.platform : "facebook",
       source: snapshot.source || MOCK_SOURCE,
       snapshotDate: snapshot.snapshotDate || dateOnly(new Date()),
       notes: snapshot.notes || "",
       demo: snapshot.demo === true || snapshot.source === MOCK_SOURCE,
+      rawMetrics: snapshot.rawMetrics || {},
       createdAt: snapshot.createdAt || new Date().toISOString(),
       updatedAt: snapshot.updatedAt || new Date().toISOString(),
       ...metrics,
@@ -435,7 +483,7 @@
   }
 
   function snapshotIdentity(snapshot) {
-    return `${snapshot.generatedPostId}|${snapshot.platform}|${snapshot.source}|${snapshot.snapshotDate}`;
+    return `${snapshot.publishedPostId || snapshot.generatedPostId}|${snapshot.platform}|${snapshot.source}|${snapshot.snapshotDate}`;
   }
 
   function createManualAnalyticsSnapshot(input) {
@@ -525,7 +573,7 @@
   function latestSnapshots(snapshots) {
     const latest = new Map();
     snapshots.forEach((snapshot) => {
-      const key = `${snapshot.generatedPostId}|${snapshot.platform}`;
+      const key = `${snapshot.publishedPostId || snapshot.generatedPostId || snapshot.rawMetrics?.externalPostId || snapshot.id}|${snapshot.platform}`;
       const existing = latest.get(key);
       if (!existing || snapshot.snapshotDate >= existing.snapshotDate) latest.set(key, snapshot);
     });
@@ -535,8 +583,14 @@
   function performanceRecords(snapshots) {
     const posts = new Map(loadTrackedPosts().map((post) => [post.id, post]));
     return latestSnapshots(snapshots).map((snapshot) => ({
-      ...posts.get(snapshot.generatedPostId),
+      ...posts.get(snapshot.publishedPostId || snapshot.generatedPostId || snapshot.rawMetrics?.externalPostId),
       ...snapshot,
+      postKey: `${snapshot.publishedPostId || snapshot.generatedPostId || snapshot.id}|${snapshot.platform}`,
+      permalink: snapshot.rawMetrics?.permalink || posts.get(snapshot.publishedPostId || snapshot.generatedPostId || snapshot.rawMetrics?.externalPostId)?.permalink || "",
+      media: Array.isArray(snapshot.rawMetrics?.media)
+        ? snapshot.rawMetrics.media
+        : posts.get(snapshot.publishedPostId || snapshot.generatedPostId || snapshot.rawMetrics?.externalPostId)?.media || [],
+      postedAt: snapshot.rawMetrics?.postedAt || posts.get(snapshot.publishedPostId || snapshot.generatedPostId || snapshot.rawMetrics?.externalPostId)?.postedAt || snapshot.snapshotDate,
       engagements: snapshot.likes + snapshot.comments + snapshot.shares + snapshot.saves,
     }));
   }
@@ -659,7 +713,7 @@
       <article class="analytics-post-card">
         <div class="card-heading">
           <h3>${escapeHtml(record.hook || record.headline || "Untitled post")}</h3>
-          <span class="card-status ${record.source === MOCK_SOURCE ? "mock-mode" : "local-only"}">${escapeHtml(formatStatus(record.source))}</span>
+          <span class="card-status ${sourceStatusClass(record.source)}">${escapeHtml(formatSourceLabel(record.source))}</span>
         </div>
         <p>${escapeHtml(record.caption || "No caption preview available.")}</p>
         <div class="analytics-post-meta">
@@ -671,7 +725,10 @@
         </div>
         <p>${escapeHtml(reason)}</p>
         ${weak ? '<p>Suggested action: review the hook, audience fit, and CTA before repeating this approach.</p>' : ""}
-        <a class="secondary-button link-button" href="${escapeHtml(record.linkTarget || "#drafts")}">Open original draft</a>
+        <div class="button-row">
+          <button class="secondary-button" type="button" data-analytics-post-key="${escapeHtml(record.postKey)}">View details</button>
+          <a class="secondary-button link-button" href="${escapeHtml(record.permalink || record.linkTarget || "#drafts")}" ${record.permalink ? 'target="_blank" rel="noopener"' : ""}>${record.permalink ? "Open platform post" : "Open original draft"}</a>
+        </div>
       </article>
     `;
   }
@@ -685,6 +742,122 @@
     getElement("analytics-underperforming-posts").innerHTML = weak.length
       ? weak.map((record) => postCardMarkup(record, true)).join("")
       : '<p class="media-state empty-state">No underperforming posts yet.</p>';
+  }
+
+  function allPostRowMarkup(record) {
+    const mediaCount = Array.isArray(record.media) ? record.media.length : 0;
+    return `
+      <article class="analytics-post-row">
+        <div>
+          <div class="card-heading">
+            <h3>${escapeHtml(record.hook || record.headline || "Untitled post")}</h3>
+            <span class="card-status ${sourceStatusClass(record.source)}">${escapeHtml(formatSourceLabel(record.source))}</span>
+          </div>
+          <p>${escapeHtml(record.caption || "No caption preview available.")}</p>
+          <div class="analytics-post-meta">
+            <span>${escapeHtml(formatStatus(record.platform))}</span>
+            <span>${escapeHtml(record.postedAt ? dateOnly(record.postedAt) : record.snapshotDate)}</span>
+            <span>Score ${record.performanceScore.toFixed(1)}</span>
+            <span>${mediaCount} media item${mediaCount === 1 ? "" : "s"}</span>
+          </div>
+        </div>
+        <button class="secondary-button" type="button" data-analytics-post-key="${escapeHtml(record.postKey)}">View details</button>
+      </article>
+    `;
+  }
+
+  function renderAllPosts(records) {
+    const target = getElement("analytics-all-posts");
+    if (!target) return;
+    const sorted = [...records].sort((a, b) => String(b.postedAt || b.snapshotDate || "").localeCompare(String(a.postedAt || a.snapshotDate || "")));
+    target.innerHTML = sorted.length
+      ? sorted.map(allPostRowMarkup).join("")
+      : '<p class="media-state empty-state">No posts match the current filters.</p>';
+  }
+
+  function detailMetricMarkup(label, value) {
+    return `
+      <article class="analytics-summary-card">
+        <span>${escapeHtml(label)}</span>
+        <strong>${escapeHtml(value)}</strong>
+      </article>
+    `;
+  }
+
+  function mediaMarkup(item, index) {
+    const url = typeof item === "string" ? item : item?.url;
+    const type = typeof item === "object" ? item?.type : "image";
+    if (!url) return "";
+    const label = `${formatStatus(type || "media")} ${index + 1}`;
+    if (["image", "carousel"].includes(String(type || "").toLowerCase())) {
+      return `
+        <a class="analytics-media-thumb" href="${escapeHtml(url)}" target="_blank" rel="noopener">
+          <img src="${escapeHtml(url)}" alt="${escapeHtml(label)}" loading="lazy" />
+          <span>${escapeHtml(label)}</span>
+        </a>
+      `;
+    }
+    return `
+      <a class="analytics-media-thumb analytics-media-link" href="${escapeHtml(url)}" target="_blank" rel="noopener">
+        <span>${escapeHtml(label)}</span>
+        <strong>Open media</strong>
+      </a>
+    `;
+  }
+
+  function renderPostDetail(records) {
+    const empty = getElement("analytics-post-detail-empty");
+    const panel = getElement("analytics-post-detail");
+    if (!empty || !panel) return;
+    if (!records.length) {
+      selectedAnalyticsPostKey = "";
+      empty.hidden = false;
+      panel.hidden = true;
+      getElement("analytics-detail-source").textContent = "Select a post";
+      getElement("analytics-detail-source").className = "card-status local-only";
+      return;
+    }
+    let record = records.find((item) => item.postKey === selectedAnalyticsPostKey);
+    if (!record) {
+      record = identifyTopPosts(records)[0] || records[0];
+      selectedAnalyticsPostKey = record.postKey;
+    }
+    empty.hidden = true;
+    panel.hidden = false;
+    const source = getElement("analytics-detail-source");
+    source.textContent = formatSourceLabel(record.source);
+    source.className = `card-status ${sourceStatusClass(record.source)}`;
+    getElement("analytics-detail-title").textContent = record.hook || record.headline || "Untitled post";
+    getElement("analytics-detail-caption").textContent = record.caption || "No caption available.";
+    getElement("analytics-detail-platform").textContent = formatStatus(record.platform);
+    getElement("analytics-detail-posted").textContent = formatDateTime(record.postedAt);
+    getElement("analytics-detail-snapshot").textContent = formatDateTime(record.snapshotDate);
+    getElement("analytics-detail-score").textContent = record.performanceScore.toFixed(1);
+    getElement("analytics-detail-metrics").innerHTML = [
+      detailMetricMarkup("Impressions", formatNumber(record.impressions)),
+      detailMetricMarkup("Reach", formatNumber(record.reach)),
+      detailMetricMarkup("Views", formatNumber(record.views)),
+      detailMetricMarkup("Engagements", formatNumber(record.engagements)),
+      detailMetricMarkup("Eng. rate", formatPercent(record.engagementRate)),
+      detailMetricMarkup("Clicks", formatNumber(record.clicks)),
+      detailMetricMarkup("Leads", formatNumber(record.leads)),
+      detailMetricMarkup("Lead rate", formatPercent(record.leadRate)),
+    ].join("");
+    const media = Array.isArray(record.media) ? record.media : [];
+    getElement("analytics-detail-media").innerHTML = media.length
+      ? media.map(mediaMarkup).join("")
+      : '<p class="media-state empty-state">No attached media was returned for this synced post.</p>';
+    const link = getElement("analytics-detail-link");
+    link.href = record.permalink || record.linkTarget || "#analytics";
+    link.textContent = record.permalink ? "Open platform post" : "Open original draft";
+    link.hidden = !(record.permalink || record.linkTarget);
+  }
+
+  function selectAnalyticsPost(event) {
+    const button = event.target.closest("[data-analytics-post-key]");
+    if (!button) return;
+    selectedAnalyticsPostKey = button.dataset.analyticsPostKey;
+    renderAnalytics();
   }
 
   function renderAnalyticsInsights() {
@@ -922,9 +1095,57 @@
     output.textContent = message;
   }
 
+  function setMetaSyncMessage(message, kind = "success") {
+    const output = getElement("analytics-meta-sync-message");
+    if (!output) return;
+    output.hidden = !message;
+    output.textContent = message;
+    output.className = `form-message ${kind === "error" ? "error-message" : "success-message"}`;
+  }
+
   function mockAnalyticsAllowed() {
     const settings = safeParse(window.localStorage.getItem(SETTINGS_KEY), {});
     return ["development", "demo", "test"].includes(settings.appEnvironment || "development");
+  }
+
+  async function syncMetaAnalytics() {
+    const bridge = activeApiBridge();
+    if (!bridge) {
+      setMetaSyncMessage(
+        "Start the local API companion before syncing Facebook or Instagram analytics. The Vercel UI cannot read Meta data by itself.",
+        "error",
+      );
+      return;
+    }
+    const button = getElement("analytics-sync-meta");
+    if (button) button.disabled = true;
+    setMetaSyncMessage("Syncing Facebook and Instagram analytics through the local API companion...");
+    try {
+      const result = await bridge.request("/api/analytics/meta-sync", {
+        method: "POST",
+        body: {
+          brand_profile_id: currentBrandProfileId(),
+          platforms: ["facebook", "instagram"],
+          limit: 25,
+        },
+      });
+      await bridge.sync();
+      const count = Number(result.createdCount || 0) + Number(result.updatedCount || 0);
+      const errors = Array.isArray(result.errors) && result.errors.length
+        ? ` ${result.errors.length} account(s) need attention.`
+        : "";
+      setMetaSyncMessage(
+        count
+          ? `${count} real Meta analytics snapshot(s) synced locally.${errors}`
+          : `Meta sync finished with no new snapshots.${errors}`,
+        errors ? "error" : "success",
+      );
+      renderAnalytics();
+    } catch (error) {
+      setMetaSyncMessage(error.message || "Meta analytics sync could not run.", "error");
+    } finally {
+      if (button) button.disabled = false;
+    }
   }
 
   async function handleManualSubmit(event) {
@@ -991,6 +1212,8 @@
       renderContentBreakdown("analytics-goal-breakdown", records, "contentGoal");
       renderContentBreakdown("analytics-angle-breakdown", records, "contentAngle");
       renderPostRankings(records);
+      renderAllPosts(records);
+      renderPostDetail(records);
       renderAnalyticsInsights();
       renderLearningReview();
       populateManualPostOptions();
@@ -1010,9 +1233,13 @@
     getElement("analytics-manual-form").addEventListener("submit", handleManualSubmit);
     getElement("analytics-manual-post").addEventListener("change", syncManualPlatform);
     getElement("analytics-insights").addEventListener("click", handleAnalyticsInsightAction);
+    getElement("analytics-top-posts").addEventListener("click", selectAnalyticsPost);
+    getElement("analytics-underperforming-posts").addEventListener("click", selectAnalyticsPost);
+    getElement("analytics-all-posts").addEventListener("click", selectAnalyticsPost);
     getElement("analytics-generate-weekly-report").addEventListener("click", generateWeeklyReport);
     getElement("analytics-refresh-memory").addEventListener("click", refreshAIMemory);
     getElement("analytics-ai-memory").addEventListener("click", archiveAIMemory);
+    getElement("analytics-sync-meta").addEventListener("click", syncMetaAnalytics);
     const generateMockButton = getElement("analytics-generate-mock");
     generateMockButton.hidden = !mockAnalyticsAllowed();
     generateMockButton.addEventListener("click", async () => {

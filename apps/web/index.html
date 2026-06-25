@@ -18,10 +18,15 @@
           </div>
         </div>
 
+        <button class="simple-mode-toggle" id="simple-mode-toggle" type="button" aria-pressed="true">
+          <span>Owner Mode</span>
+          <small>Show the simple daily path first</small>
+        </button>
+
         <nav class="nav-list" aria-label="Main navigation">
           <a class="nav-link nav-link-primary active" href="#home" aria-current="page">Control Center</a>
 
-          <details class="nav-group" open>
+          <details class="nav-group daily-nav-group" open>
             <summary>Daily Workflow</summary>
             <div class="nav-group-links">
               <a class="nav-link" href="#generate">Generate</a>
@@ -33,7 +38,7 @@
             </div>
           </details>
 
-          <details class="nav-group">
+          <details class="nav-group setup-nav-group">
             <summary>Setup</summary>
             <div class="nav-group-links">
               <a class="nav-link" href="#guide">Intro Setup Guide</a>
@@ -46,7 +51,7 @@
             </div>
           </details>
 
-          <details class="nav-group">
+          <details class="nav-group advanced-nav-group">
             <summary>Advanced Tools</summary>
             <div class="nav-group-links">
               <a class="nav-link" href="#safety">Safety Center</a>
@@ -104,6 +109,38 @@
           </div>
         </section>
 
+        <section class="workspace-section owner-path-panel" aria-labelledby="owner-path-heading">
+          <div class="section-header compact-header">
+            <div>
+              <span class="card-status local-only">Plug-and-play path</span>
+              <h2 id="owner-path-heading">Create a post without learning the whole dashboard</h2>
+              <p>Use this daily path first. The detailed screens stay available when you need setup, audits, backups, or deeper troubleshooting.</p>
+            </div>
+          </div>
+          <div class="owner-path-steps">
+            <a class="owner-path-step" href="#media">
+              <span>1</span>
+              <strong>Add media</strong>
+              <p>Upload job photos or videos.</p>
+            </a>
+            <a class="owner-path-step" href="#generate">
+              <span>2</span>
+              <strong>Create media post</strong>
+              <p>Generate a caption and post draft from your media.</p>
+            </a>
+            <a class="owner-path-step" href="#drafts">
+              <span>3</span>
+              <strong>Approve locally</strong>
+              <p>Review the draft before anything can post.</p>
+            </a>
+            <a class="owner-path-step" href="#queue">
+              <span>4</span>
+              <strong>Post or export</strong>
+              <p>Use Manual Export or guarded Facebook posting when ready.</p>
+            </a>
+          </div>
+        </section>
+
         <section class="control-summary-grid" aria-label="Control Center workflow summary">
           <article class="control-summary-card">
             <span class="card-status needs-review">Approval Required</span>
@@ -125,6 +162,31 @@
             <strong id="control-summary-engagement">0</strong>
             <p>Engagement items need reply</p>
           </article>
+        </section>
+
+        <section class="workspace-section facebook-readiness-panel" id="facebook-readiness-panel" aria-labelledby="facebook-readiness-heading">
+          <div class="section-header compact-header">
+            <div>
+              <span class="card-status needs-review" id="facebook-readiness-status">Checking</span>
+              <h2 id="facebook-readiness-heading">Facebook posting setup</h2>
+              <p id="facebook-readiness-summary">Checking the local API, Facebook account, Page permissions, token storage, ready queue items, and typed confirmation gate.</p>
+            </div>
+            <div class="topbar-actions">
+              <button class="secondary-button" id="facebook-readiness-refresh" type="button">Check Facebook setup</button>
+              <a class="primary-button link-button" id="facebook-readiness-action" href="#connected">Fix next step</a>
+            </div>
+          </div>
+          <div class="facebook-readiness-steps" id="facebook-readiness-list" aria-live="polite">
+            <article class="control-task-row control-task-empty">
+              <div>
+                <span class="card-status needs-review">Local API</span>
+                <strong>Start the local app bridge</strong>
+                <p>The setup checker appears when the local API is running. No tokens are shown in the browser.</p>
+              </div>
+              <a class="secondary-button link-button" href="#diagnostics">Diagnostics</a>
+            </article>
+          </div>
+          <p class="result-meta" id="facebook-readiness-note">No autonomous posting. Facebook requires a ready queue item and typing PUBLISH TO FACEBOOK before a real Page post is created.</p>
         </section>
 
         <section class="control-workflow-grid" aria-label="Daily workflow queues">
@@ -179,8 +241,8 @@
           <div class="control-action-grid">
             <a class="control-action-card" href="#generate">
               <span class="card-status mock-mode">Mock Data</span>
-              <strong>Generate Draft</strong>
-              <p>Create platform-specific draft ideas for review.</p>
+              <strong>Create media post</strong>
+              <p>Turn selected media into a draft caption and post idea for review.</p>
             </a>
             <a class="control-action-card" href="#guide">
               <span class="card-status local-only">Start Here</span>
@@ -389,7 +451,7 @@
               <a class="secondary-button link-button" href="#connected">Open Connected Accounts</a>
             </div>
             <div class="setup-guide-platforms">
-              <article><strong>Facebook / Instagram / Threads</strong><p>Use Meta setup placeholders now. Future real OAuth will need developer app configuration and app review checks.</p></article>
+              <article><strong>Facebook / Instagram / Threads</strong><p>Facebook real OAuth is available for local testing after Meta setup. Instagram and Threads remain scaffolded until later platform work.</p></article>
               <article><strong>YouTube Shorts</strong><p>Use YouTube mock setup now. Future upload support will require Google OAuth and YouTube Data API verification.</p></article>
               <article><strong>TikTok</strong><p>Use TikTok mock setup now. Future posting needs TikTok developer access and posting permission review.</p></article>
               <article><strong>LinkedIn</strong><p>Use LinkedIn mock setup now. Future posting may need product access and organization/page permission checks.</p></article>
@@ -1595,7 +1657,7 @@
           <header class="topbar">
             <div>
               <h1>Connected Accounts</h1>
-              <p>Mock/demo social connections for future integration readiness. Real publishing is not enabled in this build.</p>
+              <p>Mock/demo connections stay available. Facebook can start real server-side OAuth when setup is ready; posting still requires the guarded Publish Queue flow.</p>
             </div>
             <button class="secondary-button" id="connected-refresh" type="button">Refresh local status</button>
           </header>
@@ -1608,8 +1670,8 @@
             </div>
             <div>
               <span class="status-dot blocked" aria-hidden="true"></span>
-              <strong>Real publishing disabled</strong>
-              <span>Connections do not post content</span>
+              <strong>Guarded posting only</strong>
+              <span>Only Facebook Page queue items can use typed-confirmation posting</span>
             </div>
             <div>
               <span class="status-dot warning" aria-hidden="true"></span>
@@ -1622,7 +1684,7 @@
             <div class="section-header compact-header">
               <div>
                 <h2 id="connected-platforms-heading">Platform connection cards</h2>
-                <p>Use mock connect to preview setup, permissions, and status. Publishing disabled in this build.</p>
+                <p>Use mock connect to preview setup. Use Connect real only after the local API says OAuth is ready; non-Facebook posting remains disabled.</p>
               </div>
               <span class="card-status mock-mode">Mock/demo mode</span>
             </div>
@@ -1743,7 +1805,7 @@
                   <h2 id="social-setup-detail-title">Platform setup</h2>
                   <p id="social-setup-detail-status">Mock only</p>
                 </div>
-                <span class="card-status needs-review">Real publishing disabled</span>
+                <span class="card-status needs-review">Guarded publishing only</span>
               </div>
 
               <dl class="connected-account-details">
@@ -1753,7 +1815,7 @@
                 <div><dt>Connector feature status</dt><dd id="social-setup-feature-status">-</dd></div>
                 <div><dt>Mock connect availability</dt><dd id="social-setup-mock-mode">-</dd></div>
                 <div><dt>Real OAuth availability</dt><dd id="social-setup-real-oauth">-</dd></div>
-                <div><dt>Real publishing availability</dt><dd id="social-setup-real-publishing">Real publishing disabled in this build</dd></div>
+                <div><dt>Real publishing availability</dt><dd id="social-setup-real-publishing">Broad real publishing disabled; guarded Facebook Page posting requires setup</dd></div>
               </dl>
 
               <div class="social-setup-action-row">
@@ -2632,9 +2694,10 @@
           <header class="topbar">
             <div>
               <h1>Analytics</h1>
-              <p>Understand what content is working with local manual metrics and clearly labeled demo data.</p>
+              <p>Understand what content is working with manual metrics, mock data, or guarded Facebook/Instagram sync through your local API companion.</p>
             </div>
             <div class="topbar-actions">
+              <button class="secondary-button" id="analytics-sync-meta" type="button">Sync Facebook / Instagram</button>
               <button class="secondary-button" id="analytics-generate-mock" type="button">Generate mock analytics</button>
             </div>
           </header>
@@ -2642,8 +2705,8 @@
           <section class="status-strip" aria-label="Analytics safety status">
             <div>
               <span class="status-dot safe" aria-hidden="true"></span>
-              <strong>Local analytics only</strong>
-              <span>Metrics stay on this device</span>
+              <strong>Local analytics store</strong>
+              <span>Synced metrics are saved to your local database</span>
             </div>
             <div>
               <span class="status-dot warning" aria-hidden="true"></span>
@@ -2652,8 +2715,8 @@
             </div>
             <div>
               <span class="status-dot blocked" aria-hidden="true"></span>
-              <strong>No real analytics APIs</strong>
-              <span>No platform sync in this build</span>
+              <strong>Guarded Meta sync</strong>
+              <span>Facebook/Instagram sync requires your local server and credentials</span>
             </div>
           </section>
 
@@ -2661,7 +2724,7 @@
             <div class="section-header compact-header">
               <div>
                 <h2 id="analytics-overview-heading">Performance overview</h2>
-                <p>Use filters to compare local snapshots. Manual and mock sources remain visibly distinct.</p>
+                <p>Use filters to compare manual, mock, and real Meta sync snapshots. Each source remains visibly distinct.</p>
               </div>
               <span class="card-status mock-mode">Local SQLite bridge</span>
             </div>
@@ -2697,12 +2760,13 @@
                   <option value="mock">Mock/demo data</option>
                   <option value="imported_csv">Imported CSV</option>
                   <option value="estimated">Estimated</option>
-                  <option value="platform_api">Future platform API</option>
+                  <option value="platform_api">Real Meta sync</option>
                 </select>
               </label>
             </div>
 
             <p class="form-message success-message" id="analytics-mock-message" role="status" hidden></p>
+            <p class="form-message success-message" id="analytics-meta-sync-message" role="status" hidden></p>
             <div class="media-state loading-state" id="analytics-loading-state" role="status">Loading local analytics...</div>
             <div class="media-state error-state" id="analytics-error-state" role="alert" hidden>
               Analytics could not load. Check the local demo adapter and try again.
@@ -2765,6 +2829,45 @@
               </div>
               <div class="analytics-post-list" id="analytics-underperforming-posts"></div>
             </section>
+          </section>
+
+          <section class="workspace-section analytics-panel" aria-labelledby="analytics-all-posts-heading">
+            <div class="section-header compact-header">
+              <div>
+                <h2 id="analytics-all-posts-heading">All tracked posts</h2>
+                <p>Open any filtered post, including Facebook/Instagram synced posts that do not appear in the top or underperforming lists.</p>
+              </div>
+              <span class="card-status real-sync">Real Meta sync supported</span>
+            </div>
+            <div class="analytics-all-post-list" id="analytics-all-posts"></div>
+          </section>
+
+          <section class="workspace-section analytics-panel analytics-post-detail" aria-labelledby="analytics-post-detail-heading">
+            <div class="section-header compact-header">
+              <div>
+                <h2 id="analytics-post-detail-heading">Post detail</h2>
+                <p>Click a top or underperforming post to inspect its metrics, source, caption, link, and attached media.</p>
+              </div>
+              <span class="card-status local-only" id="analytics-detail-source">Select a post</span>
+            </div>
+            <p class="media-state empty-state" id="analytics-post-detail-empty">Select a post from Top posts or Underperforming posts to see more detail.</p>
+            <article class="analytics-detail-card" id="analytics-post-detail" hidden>
+              <div class="analytics-detail-main">
+                <div>
+                  <h3 id="analytics-detail-title">Untitled post</h3>
+                  <p id="analytics-detail-caption">No caption available.</p>
+                </div>
+                <dl class="analytics-detail-list">
+                  <div><dt>Platform</dt><dd id="analytics-detail-platform">-</dd></div>
+                  <div><dt>Posted</dt><dd id="analytics-detail-posted">-</dd></div>
+                  <div><dt>Snapshot</dt><dd id="analytics-detail-snapshot">-</dd></div>
+                  <div><dt>Score</dt><dd id="analytics-detail-score">-</dd></div>
+                </dl>
+              </div>
+              <div class="analytics-detail-metrics" id="analytics-detail-metrics"></div>
+              <div class="analytics-media-grid" id="analytics-detail-media" aria-label="Attached post media"></div>
+              <a class="secondary-button link-button" id="analytics-detail-link" href="#analytics" target="_blank" rel="noopener">Open post link</a>
+            </article>
           </section>
 
           <section class="workspace-section analytics-panel" aria-labelledby="analytics-insights-heading">

@@ -12,6 +12,7 @@ from apps.api.local_server import (
     LocalApiApplication,
     LocalApiError,
     LocalApiHttpServer,
+    _redact_local_api_log,
 )
 from scripts.db.seed_demo import DEMO_BRAND_ID, seed_demo_database
 
@@ -37,6 +38,19 @@ class LocalApiServerTest(unittest.TestCase):
         db_path = Path(temp_dir.name) / "app.sqlite"
         seed_demo_database(db_path)
         return LocalApiApplication(db_path)
+
+    def test_request_logging_redacts_oauth_callback_secrets(self):
+        line = (
+            '"GET /api/connect/facebook/callback?code=oauth-code-must-not-leak'
+            '&state=state-must-not-leak&access_token=token-must-not-leak HTTP/1.1" 302 -'
+        )
+
+        redacted = _redact_local_api_log(line)
+
+        self.assertNotIn("oauth-code-must-not-leak", redacted)
+        self.assertNotIn("state-must-not-leak", redacted)
+        self.assertNotIn("token-must-not-leak", redacted)
+        self.assertEqual(redacted.count("[REDACTED]"), 3)
 
     def test_health_and_bootstrap_are_local_only_and_token_safe(self):
         app = self._application()
@@ -164,6 +178,51 @@ class LocalApiServerTest(unittest.TestCase):
         self.assertEqual(
             reloaded["brandProfile"]["tagline"],
             "Careful local exterior service",
+        )
+
+    def test_meta_analytics_sync_rejects_invalid_limit_safely(self):
+        app = self._application()
+
+        with self.assertRaises(LocalApiError) as context:
+            app.dispatch(
+                "POST",
+                "/api/analytics/meta-sync",
+                body={"platforms": ["facebook"], "limit": "not-a-number"},
+            )
+
+        self.assertIn("invalid_meta_analytics_limit", context.exception.error_codes)
+        self.assertIn("limit", str(context.exception).lower())
+
+    def test_facebook_publishing_readiness_route_is_token_safe(self):
+        app = self._application()
+
+        readiness = app.dispatch("GET", "/api/facebook-publishing/readiness").body
+        serialized = json.dumps(readiness)
+
+        self.assertIn("summaryId", readiness)
+        self.assertIn("steps", readiness)
+        self.assertIn("nextAction", readiness)
+        self.assertIn("readyQueueItemCount", readiness)
+        self.assertTrue(readiness["publishNonceRequired"])
+        self.assertTrue(readiness["publishNonce"])
+        self.assertNotIn("encrypted_access_token", serialized)
+        self.assertNotIn("encrypted_refresh_token", serialized)
+        self.assertNotIn("accessToken", serialized)
+        self.assertNotIn("refreshToken", serialized)
+
+    def test_facebook_publish_route_requires_fresh_local_nonce(self):
+        app = self._application()
+
+        with self.assertRaises(Exception) as raised:
+            app.dispatch(
+                "POST",
+                "/api/publish-queue/demo-queue-gutter-reminder/publish-facebook",
+                body={"confirmationPhrase": "publish"},
+            )
+
+        self.assertIn(
+            "facebook_publish_nonce_required",
+            getattr(raised.exception, "error_codes", []),
         )
 
     def test_onboarding_complete_skip_and_restart_routes_persist(self):
@@ -484,12 +543,16 @@ class LocalApiServerTest(unittest.TestCase):
 
     def test_facebook_publish_route_requires_explicit_confirmation(self):
         app = self._application()
+        readiness = app.dispatch("GET", "/api/facebook-publishing/readiness").body
 
         with self.assertRaises(Exception) as raised:
             app.dispatch(
                 "POST",
                 "/api/publish-queue/demo-queue-gutter-reminder/publish-facebook",
-                body={"confirmationPhrase": "publish"},
+                body={
+                    "confirmationPhrase": "publish",
+                    "publishNonce": readiness["publishNonce"],
+                },
             )
 
         self.assertIn("confirmation_required", getattr(raised.exception, "error_codes", []))

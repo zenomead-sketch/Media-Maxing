@@ -2,7 +2,7 @@
 
 This document describes the connector foundation for future social platform integrations.
 
-The current connector layer is scaffold-only. It does not call real platform APIs, does not store tokens, does not publish posts, and does not send replies.
+The connector layer is safe by default. Most connectors are scaffold/mock-only and do not call real platform APIs, store tokens, publish posts, or send replies. The current exception is the guarded Facebook path: server-side OAuth, Page discovery, and Facebook Page text or single-image posting can be used only after explicit local setup, feature flags, preflight, Page token availability, emergency pause checks, and typed confirmation.
 
 ## Supported Platforms
 
@@ -51,11 +51,13 @@ Supported feature statuses are:
 - `ready_for_testing`
 - `enabled`
 
-Meta platforms now use dedicated `mock_only` connector scaffolds:
+Meta platforms now use dedicated connector scaffolds:
 
 - Facebook
 - Instagram
 - Threads
+
+Facebook also has a guarded local testing path for real OAuth, Page discovery, and Page text/single-image posting. Instagram and Threads remain scaffolded for future real platform work.
 
 YouTube Shorts now also uses a dedicated `mock_only` connector scaffold for OAuth readiness and mocked channel health checks.
 
@@ -75,7 +77,7 @@ All connector capabilities default to safe values:
 - real network checks disabled
 - manual export fallback supported
 
-Publishing helper methods return `disabled_by_policy`. This is intentional. Real publishing requires a future explicit platform implementation with OAuth, secure token storage, preflight tests, approval gates, emergency pause enforcement, and documentation.
+Publishing helper methods return `disabled_by_policy` by default. This is intentional. The only current real publishing exception is the guarded Facebook Page path, and it still requires server-side flags, a ready Publish Queue item, preflight, approval gates, emergency pause enforcement, Page token availability, documentation, and typed owner confirmation.
 
 ## Platform Registry
 
@@ -140,5 +142,6 @@ Batch 6 added a server-only HTTP client, explicit integration flags, guarded
 Meta OAuth exchange readiness, connector health checks, and YouTube, TikTok,
 LinkedIn, and X scaffolds. Default tests block real network calls.
 
-Real publishing remains disabled until a later explicit task enables one
-platform behind safety gates.
+Broad real publishing remains disabled. The current narrow exception is guarded
+Facebook Page text or single-image posting through the server-side Publish Queue
+service after explicit setup and typed confirmation.

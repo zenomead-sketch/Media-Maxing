@@ -28,7 +28,7 @@ ENABLE_REAL_PUBLISHING=false
 META_ENABLE_REAL_PUBLISHING=false
 ```
 
-Publishing remains disabled even if those values are accidentally set to `true`.
+Meta OAuth does not publish by itself. Broad Meta publishing remains disabled. The only current exception is the separate guarded Facebook Page text or single-image posting path, which also requires Publish Queue readiness, a connected Page token, emergency pause off, and typed confirmation.
 
 ## OAuth Start Flow
 
@@ -54,13 +54,14 @@ The callback flow:
 4. Checks all real OAuth and network flags again.
 5. Exchanges the code only when every guard passes.
 6. Marks the state consumed.
-7. Creates connector audit logs.
+7. For Facebook, can discover the selected Page through `/me/accounts` and store a Page token only through the token security service when explicit local development storage is allowed.
+8. Creates connector audit logs.
 
 Authorization codes are never logged.
 
 ## Token Exchange Behavior
 
-The Meta token exchange path uses the server-only platform HTTP client. It supports form-encoded token requests and provider error normalization.
+The Meta token exchange path uses the server-only platform HTTP client. It uses Meta's documented query-parameter token request and provider error normalization.
 
 If real OAuth is disabled, network calls are disabled, config is missing, or state is invalid, the exchange returns a safe error and does not call Meta.
 

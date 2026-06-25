@@ -2,7 +2,7 @@
 
 The Social Integration Setup screen helps a non-coder understand what is ready, what is missing, and what can stay in mock mode for now.
 
-This setup helper does not publish posts, call real social APIs, fetch comments, fetch analytics, or store real tokens.
+This setup helper does not publish posts by itself, fetch comments, send replies, or expose tokens. Facebook can use guarded server-side OAuth and Page discovery after explicit local setup. Other platforms remain mock/scaffolded until later platform work.
 
 ## What The Wizard Shows
 
@@ -13,7 +13,7 @@ This setup helper does not publish posts, call real social APIs, fetch comments,
 - Required account type and placeholder future scopes.
 - Mock connection test availability.
 - Real OAuth availability.
-- Real publishing availability, which remains disabled in this build.
+- Real publishing availability. Broad publishing remains disabled; guarded Facebook Page posting is the only current exception and still requires Publish Queue confirmation.
 - Per-platform setup checklist.
 - Developer docs placeholders that must be verified before real integrations are enabled.
 
@@ -31,7 +31,7 @@ In mock mode:
 
 ## Real Mode
 
-Facebook real OAuth is prepared for local testing behind explicit flags. Other real OAuth paths remain scaffolded. Real publishing stays disabled unless a future task explicitly enables one platform with safety gates.
+Facebook real OAuth is prepared for local testing behind explicit flags. Other real OAuth paths remain scaffolded. The Connected Accounts screen shows **Connect real** only when the local API reports that env vars and real OAuth flags are ready. Real publishing stays disabled by default, except the narrow guarded Facebook Page posting path documented in `docs/facebook-real-use.md`.
 
 Before real OAuth is used, the app must have:
 
@@ -42,7 +42,7 @@ Before real OAuth is used, the app must have:
 - Safe frontend account DTOs.
 - Platform-specific setup docs verified against official provider docs.
 
-Real publishing is still disabled even if environment flags are accidentally set to true.
+Broad real publishing remains disabled even if environment flags are accidentally set to true. The only current exception is guarded Facebook Page text or single-image posting, and that still requires the separate Publish Queue confirmation flow described in `docs/facebook-real-use.md`.
 
 ## Environment Validation
 
@@ -141,7 +141,7 @@ Important files:
 - `INTEGRATIONS_MODE`: defaults to `mock`; allowed values are `mock`, `disabled`, and `real_oauth`.
 - `ENABLE_REAL_NETWORK_CALLS`: must stay `false` until real integration work.
 - `ENABLE_REAL_OAUTH`: must stay `false` until guarded OAuth work.
-- `ENABLE_REAL_PUBLISHING`: must stay `false`; publishing is not implemented.
+- `ENABLE_REAL_PUBLISHING`: keep `false` unless intentionally following `docs/facebook-real-use.md` for guarded Facebook Page testing.
 - `TOKEN_STORAGE_MODE`: defaults to `placeholder_not_stored`.
 - Platform client IDs: identify a future developer app and are masked in UI.
 - Platform client secrets: secret values that must never be displayed or committed.
@@ -157,6 +157,7 @@ Use the Social Integration Setup screen in the web app:
 3. Select a platform.
 4. Review missing env vars, redirect URI, setup checklist, and mock connection availability.
 5. Choose **I will add API keys later** to stay safely in mock mode.
+6. For Facebook real posting setup only, finish `docs/facebook-real-use.md`, then open **Connected Accounts** and use **Connect real** for Facebook.
 
 The localhost bridge loads the repo-root `.env` file when present and returns
 only masked validation status. The server-side validation service in

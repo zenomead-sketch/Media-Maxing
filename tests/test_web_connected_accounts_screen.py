@@ -35,7 +35,8 @@ class WebConnectedAccountsScreenTest(unittest.TestCase):
     def test_platform_cards_and_safety_copy_are_present(self):
         self.assertIn('href="#connected"', self.html)
         self.assertIn("Connected Accounts", self.html)
-        self.assertIn("real publishing is not enabled", self.html.lower())
+        self.assertIn("facebook can start real server-side oauth", self.html.lower())
+        self.assertIn("non-facebook posting remains disabled", self.html.lower())
         self.assertIn("mock/demo", self.html.lower())
 
         for label in ("Facebook", "Instagram", "Threads", "YouTube", "TikTok", "LinkedIn", "X"):
@@ -47,6 +48,7 @@ class WebConnectedAccountsScreenTest(unittest.TestCase):
         for name in (
             "renderConnectedAccounts",
             "mockConnectPlatform",
+            "startRealOAuthPlatform",
             "disconnectConnectedAccount",
             "showConnectedSetupInstructions",
             "loadConnectedAccounts",
@@ -64,6 +66,9 @@ class WebConnectedAccountsScreenTest(unittest.TestCase):
         self.assertIn("Check connection", self.script)
         self.assertIn("healthStatus", self.script)
         self.assertIn("lastValidatedAt", self.script)
+        self.assertIn("Connect real", self.script)
+        self.assertIn("/api/connect/${encodeURIComponent(config.id)}/start", self.script)
+        self.assertIn("requestedScopes", self.script)
         self.assertIn('["facebook", "instagram", "youtube", "tiktok", "linkedin", "x"]', self.script)
         self.assertNotIn("enabled first for Facebook, Instagram, and YouTube", self.script)
 

@@ -41,6 +41,7 @@ class WebAnalyticsScreenTest(unittest.TestCase):
             "analytics-angle-breakdown",
             "analytics-top-posts",
             "analytics-underperforming-posts",
+            "analytics-all-posts",
             "analytics-insights",
             "analytics-learning-week-start",
             "analytics-generate-weekly-report",
@@ -69,6 +70,20 @@ class WebAnalyticsScreenTest(unittest.TestCase):
             "analytics-manual-error",
             "analytics-generate-mock",
             "analytics-mock-message",
+            "analytics-sync-meta",
+            "analytics-meta-sync-message",
+            "analytics-post-detail-empty",
+            "analytics-post-detail",
+            "analytics-detail-title",
+            "analytics-detail-source",
+            "analytics-detail-caption",
+            "analytics-detail-platform",
+            "analytics-detail-posted",
+            "analytics-detail-snapshot",
+            "analytics-detail-score",
+            "analytics-detail-metrics",
+            "analytics-detail-media",
+            "analytics-detail-link",
         ]
 
         for element_id in required_ids:
@@ -79,7 +94,8 @@ class WebAnalyticsScreenTest(unittest.TestCase):
         self.assertIn('"analytics"', self.settings_script)
         self.assertIn('href="#analytics"', self.html)
         self.assertIn("Mock analytics are demo data", self.html)
-        self.assertIn("No real analytics APIs", self.html)
+        self.assertIn("Guarded Meta sync", self.html)
+        self.assertIn("Real Meta sync", self.html)
         self.assertIn("Manual analytics entry", self.html)
         self.assertIn('<script src="./analytics.js"></script>', self.html)
 
@@ -97,6 +113,10 @@ class WebAnalyticsScreenTest(unittest.TestCase):
             "identifyUnderperformingPosts",
             "renderAnalytics",
             "renderAnalyticsInsights",
+            "renderPostDetail",
+            "renderAllPosts",
+            "selectAnalyticsPost",
+            "syncMetaAnalytics",
             "handleAnalyticsInsightAction",
             "renderLearningReview",
             "generateWeeklyReport",
@@ -115,6 +135,7 @@ class WebAnalyticsScreenTest(unittest.TestCase):
         self.assertIn("nextWeekContentSuggestions", self.script)
         self.assertIn("engagementSummary", self.script)
         self.assertIn("leadSignals", self.script)
+        self.assertIn("/api/analytics/meta-sync", self.script)
         self.assertNotIn("fetch(", self.script)
 
     def test_analytics_css_classes_present(self):
@@ -125,7 +146,12 @@ class WebAnalyticsScreenTest(unittest.TestCase):
             ".analytics-breakdown-grid",
             ".analytics-table-wrap",
             ".analytics-post-list",
+            ".analytics-all-post-list",
             ".analytics-post-card",
+            ".analytics-post-row",
+            ".analytics-post-detail",
+            ".analytics-media-grid",
+            ".analytics-media-thumb",
             ".analytics-insight-list",
             ".analytics-insight-card",
             ".analytics-learning-toolbar",

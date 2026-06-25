@@ -25,6 +25,23 @@ The Home screen is now the Control Center. It is the starting point after setup:
 it shows the recommended next step, items that need attention, work that is
 ready to do, this week's local schedule signals, and safety status.
 
+Owner Mode is on by default. It keeps the daily workflow visible and folds the
+setup/admin areas unless you are actively using them. Turn Owner Mode off only
+when you want the app to feel more like a backend dashboard.
+
+Use the **Plug-and-play path** on Control Center when you do not know where to
+go next:
+
+1. Add media.
+2. Create media post.
+3. Approve locally.
+4. Post or export from Publish Queue.
+
+The **Facebook posting setup** panel checks the guarded Facebook path through
+the local API. It explains whether the local API, Page account, permissions,
+token storage, ready queue item, and typed confirmation gate are ready. Token
+values are never shown in the browser.
+
 The detailed screens still exist, but they are grouped in the sidebar as Daily
 Workflow, Setup, and Advanced Tools so the app feels less crowded. On a fresh
 database, start with Onboarding and the setup checklist.
@@ -87,7 +104,14 @@ change already scheduled content.
 
 Publish Queue shows waiting, ready, blocked, manually exported, mock published,
 failed, canceled, and skipped queue items. It runs preflight checks and shows
-blocked reasons. Real publishing is disabled; manual export is the safe path.
+blocked reasons. Manual Export is the default safe path.
+
+The only current real posting path is a guarded Facebook Page text or
+single-image post. It appears only in Publish Queue, requires a real connected
+Facebook Page, required Page permissions, server-side token availability,
+passed or warning-only preflight, emergency pause off, and typing
+`PUBLISH TO FACEBOOK`. Demo/mock Facebook accounts are blocked from real
+posting.
 
 ## Manual Export
 

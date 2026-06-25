@@ -2,7 +2,7 @@
 
 This document describes the current OAuth scaffolding for connected social accounts.
 
-The implementation is safe local-first OAuth scaffolding. Mock OAuth remains the default. A guarded Meta short-lived token exchange path exists for future manual testing, but it does not run unless explicit safety flags and credentials are configured. The app still does not publish content.
+The implementation is safe local-first OAuth scaffolding. Mock OAuth remains the default. A guarded Meta short-lived token exchange path exists for local Facebook testing, but it does not run unless explicit safety flags and credentials are configured. OAuth by itself does not publish content; the only current real posting exception is the separate guarded Facebook Page Publish Queue action.
 
 ## Current Implementation
 
@@ -54,9 +54,10 @@ OAuth callback:
 6. In mock mode, creates a local mock social account.
 7. In guarded Meta real OAuth mode, validates feature flags and configuration before any network call.
 8. Creates a placeholder token metadata row with `placeholder_not_stored`, or delegates token storage to the token security service.
-9. Marks the OAuth state consumed after a successful callback path.
-10. Creates safe connector audit logs.
-11. Returns a frontend-safe account DTO.
+9. For Facebook only, can run guarded Page discovery and store a Page token through the token security service when explicit local development token storage is enabled.
+10. Marks the OAuth state consumed after a successful callback path.
+11. Creates safe connector audit logs.
+12. Returns a frontend-safe account DTO.
 
 ## Guarded Meta Token Exchange
 
@@ -75,7 +76,7 @@ It requires:
 
 If any requirement is missing, no network call is made.
 
-The exchange sends a form-encoded request through the server-only platform HTTP client. Provider responses and errors are redacted before audit logs or returned error objects are created.
+The exchange sends Meta's documented query-parameter request through the server-only platform HTTP client. Provider responses and errors are redacted before audit logs or returned error objects are created.
 
 With `TOKEN_STORAGE_MODE=placeholder_not_stored`, raw token storage is refused. The app creates a limited connected account and placeholder token metadata so UI and preflight can represent the connection without exposing token material.
 
@@ -159,7 +160,7 @@ Before real OAuth becomes operator-ready, the app still needs:
 - connector health checks
 - explicit safety documentation
 
-Real publishing remains disabled even after OAuth is added.
+OAuth does not automatically enable publishing. Guarded Facebook Page posting is handled by a separate Publish Queue service and still requires preflight, emergency pause checks, a server-side Page token, explicit publishing flags, and typed confirmation. Other platforms remain disabled until they receive their own safety gates, tests, and documentation.
 
 ## How To Test
 

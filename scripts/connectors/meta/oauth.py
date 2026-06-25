@@ -37,19 +37,21 @@ def build_real_meta_authorization_url(
     redirect_uri: str,
     state: str,
     scopes: tuple[str, ...],
+    auth_type: str | None = "rerequest",
 ) -> str:
     # TODO: Verify exact Meta OAuth endpoint and scope behavior against current
     # official docs before enabling real OAuth. This builder is inert unless
     # real OAuth is explicitly configured and requested.
-    query = urlencode(
-        {
-            "client_id": config.clientId or "",
-            "redirect_uri": redirect_uri,
-            "state": state,
-            "response_type": "code",
-            "scope": ",".join(scopes),
-        }
-    )
+    query_params = {
+        "client_id": config.clientId or "",
+        "redirect_uri": redirect_uri,
+        "state": state,
+        "response_type": "code",
+        "scope": ",".join(scopes),
+    }
+    if auth_type:
+        query_params["auth_type"] = auth_type
+    query = urlencode(query_params)
     return f"https://www.facebook.com/{config.graphApiVersion}/dialog/oauth?{query}"
 
 
@@ -64,14 +66,13 @@ def build_meta_token_exchange_request(
     # allowing real operator use. This request is only sent by guarded
     # server-side code when all real OAuth safety flags are enabled.
     return PlatformHttpRequest(
-        method=PlatformHttpMethod.POST,
+        method=PlatformHttpMethod.GET,
         url=f"https://graph.facebook.com/{config.graphApiVersion}/oauth/access_token",
-        formBody={
+        query={
             "client_id": config.clientId or "",
             "client_secret": config.clientSecret or "",
             "redirect_uri": redirect_uri,
             "code": code,
-            "grant_type": "authorization_code",
         },
     )
 

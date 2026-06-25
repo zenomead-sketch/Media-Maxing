@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from contextlib import closing
 from pathlib import Path
+from unittest.mock import patch
 
 from scripts.db.init_db import initialize_database
 from scripts.db.settings import update_app_settings
@@ -321,6 +322,76 @@ class PreflightValidationServiceTest(unittest.TestCase):
         self.assertFalse(result.realPublishingEligible)
         self.assertNotIn("missing_connected_account", result.warning_codes)
         self.assertIn("real_publishing_disabled_by_policy", result.warning_codes)
+
+    def test_real_facebook_page_can_be_real_publish_eligible_when_flags_are_enabled(self):
+        db_path = self._database()
+        account_id = create_mock_social_account(
+            db_path,
+            platform="facebook",
+            display_name="Real Local Facebook Page",
+            platform_account_id="fb-page-real-123",
+            account_type="page",
+            connection_status="connected",
+            granted_scopes=[
+                "pages_show_list",
+                "pages_manage_metadata",
+                "pages_read_engagement",
+                "pages_manage_posts",
+            ],
+            account_id="acct-facebook-real-page",
+        )
+        _, _, queue_id = self._create_scheduled_queue(db_path, platform="facebook")
+
+        with patch.dict(
+            "os.environ",
+            {
+                "INTEGRATIONS_MODE": "real_oauth",
+                "ENABLE_REAL_NETWORK_CALLS": "true",
+                "ENABLE_REAL_PUBLISHING": "true",
+                "META_ENABLE_REAL_PUBLISHING": "true",
+            },
+            clear=False,
+        ):
+            result = PreflightValidationService(db_path).validate_queue_item(queue_id)
+
+        self.assertEqual(result.accountCheckStatus, "connected")
+        self.assertEqual(result.matchedSocialAccountId, account_id)
+        self.assertEqual(result.accountErrors, [])
+        self.assertTrue(result.realPublishingEligible)
+        self.assertNotIn("real_publishing_disabled_by_policy", result.warning_codes)
+
+    def test_mock_facebook_account_never_becomes_real_publish_eligible(self):
+        db_path = self._database()
+        create_mock_social_account(
+            db_path,
+            platform="facebook",
+            display_name="Mock Facebook Page",
+            account_type="page",
+            connection_status="connected",
+            granted_scopes=[
+                "pages_show_list",
+                "pages_manage_metadata",
+                "pages_read_engagement",
+                "pages_manage_posts",
+            ],
+        )
+        _, _, queue_id = self._create_scheduled_queue(db_path, platform="facebook")
+
+        with patch.dict(
+            "os.environ",
+            {
+                "INTEGRATIONS_MODE": "real_oauth",
+                "ENABLE_REAL_NETWORK_CALLS": "true",
+                "ENABLE_REAL_PUBLISHING": "true",
+                "META_ENABLE_REAL_PUBLISHING": "true",
+            },
+            clear=False,
+        ):
+            result = PreflightValidationService(db_path).validate_queue_item(queue_id)
+
+        self.assertIn("mock_connected_account", result.warning_codes)
+        self.assertIn("future_real_publish_blocked", result.accountErrors[0])
+        self.assertFalse(result.realPublishingEligible)
 
     def test_expired_account_requires_reauth_and_blocks_future_real_publish(self):
         db_path = self._database()

@@ -181,6 +181,13 @@ class MetaOAuthExchangeReadinessTest(unittest.TestCase):
         self.assertIn("facebook.com", result.authorizationUrl or "")
         self.assertIn("/dialog/oauth", result.authorizationUrl or "")
         self.assertIn("state=", result.authorizationUrl or "")
+        query = parse_qs(urlparse(result.authorizationUrl or "").query)
+        self.assertEqual(query.get("auth_type"), ["rerequest"])
+        requested_scopes = set(",".join(query.get("scope", [])).split(","))
+        self.assertIn("pages_show_list", requested_scopes)
+        self.assertIn("pages_manage_metadata", requested_scopes)
+        self.assertIn("pages_read_engagement", requested_scopes)
+        self.assertIn("pages_manage_posts", requested_scopes)
         self.assertIsNotNone(result.stateId)
         self.assertIn("real_oauth_only", " ".join(result.warnings))
 
@@ -269,7 +276,10 @@ class MetaOAuthExchangeReadinessTest(unittest.TestCase):
         self.assertTrue(result.account["requiresReauth"])
         self.assertNotIn("accessToken", result.account)
         self.assertEqual(len(requests), 1)
-        self.assertEqual(requests[0].formBody["grant_type"], "authorization_code")
+        self.assertEqual(str(requests[0].method), "GET")
+        self.assertEqual(requests[0].query["code"], "real-code-must-not-leak")
+        self.assertEqual(requests[0].query["client_secret"], "fake-meta-client-secret")
+        self.assertIsNone(requests[0].formBody)
 
         with closing(sqlite3.connect(db_path)) as connection:
             token_row = connection.execute(
@@ -296,6 +306,121 @@ class MetaOAuthExchangeReadinessTest(unittest.TestCase):
         audit_text = json.dumps([tuple(row) for row in audit_rows])
         self.assertIn("token_exchange", audit_text)
         self.assertNotIn("meta-access-token-must-not-leak", audit_text)
+        self.assertNotIn("real-code-must-not-leak", audit_text)
+
+    def test_real_facebook_oauth_discovers_page_and_stores_page_token_in_dev_mode(self):
+        db_path = self._database()
+        requests = []
+
+        def fake_meta_transport(request, timeout):
+            requests.append(request)
+            if request.url.endswith("/oauth/access_token"):
+                return PlatformHttpResponse(
+                    ok=True,
+                    status=200,
+                    json={
+                        "access_token": "meta-user-token-must-not-leak",
+                        "token_type": "bearer",
+                        "expires_in": 3600,
+                        "scope": "pages_show_list,pages_manage_metadata,pages_read_engagement,pages_manage_posts",
+                    },
+                    text='{"access_token":"meta-user-token-must-not-leak"}',
+                )
+            if request.url.endswith("/me/accounts"):
+                self.assertEqual(
+                    request.headers.get("Authorization"),
+                    "Bearer meta-user-token-must-not-leak",
+                )
+                return PlatformHttpResponse(
+                    ok=True,
+                    status=200,
+                    json={
+                        "data": [
+                            {
+                                "id": "fb-page-real-123",
+                                "name": "Real Local Test Page",
+                                "username": "real_local_test",
+                                "category": "Local Service",
+                                "access_token": "facebook-page-token-must-not-leak",
+                            }
+                        ]
+                    },
+                    text='{"data":[{"id":"fb-page-real-123","access_token":"facebook-page-token-must-not-leak"}]}',
+                )
+            raise AssertionError(f"Unexpected Meta request URL: {request.url}")
+
+        env = self._real_oauth_env(
+            META_REDIRECT_URI="http://localhost:8000/api/connect/facebook/callback",
+            TOKEN_STORAGE_MODE="insecure_dev_only",
+            ALLOW_INSECURE_TOKEN_STORAGE="true",
+        )
+        with patch.dict(os.environ, env, clear=True):
+            service, state = self._service_with_state(
+                db_path,
+                platform="facebook",
+                transport=fake_meta_transport,
+            )
+            result = service.handle_callback(
+                platform="facebook",
+                state=state,
+                code="real-code-must-not-leak",
+                now="2026-05-28T12:01:00Z",
+            )
+
+        self.assertTrue(result.success)
+        self.assertEqual(result.status, "real_oauth_connected")
+        self.assertEqual(result.account["platform"], "facebook")
+        self.assertEqual(result.account["displayName"], "Real Local Test Page")
+        self.assertEqual(result.account["connectionStatus"], "connected")
+        self.assertFalse(result.account["requiresReauth"])
+        self.assertNotIn("accessToken", result.account)
+        self.assertEqual(len(requests), 2)
+
+        with closing(sqlite3.connect(db_path)) as connection:
+            connection.row_factory = sqlite3.Row
+            account = connection.execute(
+                """
+                SELECT platform_account_id, display_name, connection_status,
+                       requires_reauth, account_type, granted_scopes_json
+                FROM social_accounts
+                WHERE platform = 'facebook'
+                ORDER BY created_at DESC
+                LIMIT 1
+                """
+            ).fetchone()
+            page_token = connection.execute(
+                """
+                SELECT token_type, encrypted_access_token, encryption_status, scope
+                FROM platform_tokens
+                WHERE platform = 'facebook'
+                  AND token_type = 'page_access'
+                ORDER BY created_at DESC
+                LIMIT 1
+                """
+            ).fetchone()
+            audit_rows = connection.execute(
+                """
+                SELECT action, status, message, safe_metadata_json
+                FROM connector_audit_logs
+                WHERE platform = 'facebook'
+                ORDER BY created_at
+                """
+            ).fetchall()
+
+        self.assertEqual(account["platform_account_id"], "fb-page-real-123")
+        self.assertEqual(account["display_name"], "Real Local Test Page")
+        self.assertEqual(account["connection_status"], "connected")
+        self.assertEqual(account["requires_reauth"], 0)
+        self.assertEqual(account["account_type"], "page")
+        self.assertIn("pages_manage_posts", json.loads(account["granted_scopes_json"]))
+        self.assertEqual(page_token["token_type"], "page_access")
+        self.assertEqual(page_token["encryption_status"], "insecure_dev_only")
+        self.assertEqual(page_token["encrypted_access_token"], "facebook-page-token-must-not-leak")
+        self.assertIn("pages_manage_posts", page_token["scope"])
+        audit_text = json.dumps([dict(row) for row in audit_rows])
+        self.assertIn("account_discovery", audit_text)
+        self.assertNotIn("meta-user-token-must-not-leak", audit_text)
+        self.assertNotIn("facebook-page-token-must-not-leak", audit_text)
         self.assertNotIn("real-code-must-not-leak", audit_text)
 
     def test_http_401_returns_safe_requires_reauth_error(self):

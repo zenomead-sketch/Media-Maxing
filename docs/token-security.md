@@ -22,7 +22,7 @@ Supported storage modes are:
 - `encrypted_file`: planned encrypted local file storage. Not implemented yet.
 - `encrypted_database`: planned encrypted SQLite token blob storage. Not implemented yet.
 - `placeholder_not_stored`: current default. Refuses raw token storage.
-- `insecure_dev_only`: development-only raw storage for future local experiments.
+- `insecure_dev_only`: development-only raw storage for local Facebook testing.
 
 `insecure_dev_only` is blocked unless both are true:
 
@@ -31,7 +31,7 @@ APP_ENV=development
 ALLOW_INSECURE_TOKEN_STORAGE=true
 ```
 
-Do not use `insecure_dev_only` with real business accounts or real customer data.
+Do not use `insecure_dev_only` with client accounts, shared machines, production deployments, or real customer data. It exists so a single local operator can test guarded Facebook Page posting before OS keychain/encrypted storage is implemented.
 
 `platform_tokens` rows may store token metadata such as:
 
@@ -148,14 +148,16 @@ Accounts require reauth when:
 
 ## Current Limitation
 
-No keychain or encrypted local token vault exists yet. Until one is implemented and tested, guarded real OAuth token exchange can only create limited account metadata and placeholder token rows.
+No keychain or encrypted local token vault exists yet. With the safe default `placeholder_not_stored`, guarded real OAuth token exchange can only create limited account metadata and placeholder token rows.
 
 Limited Meta accounts created after a successful guarded token exchange should be treated as setup progress, not production-ready connections:
 
-- account discovery is not implemented
+- publish-ready Page token storage is not available in placeholder mode
 - long-lived token exchange is not implemented
 - `requiresReauth` may remain true
-- real publishing remains disabled
+- real publishing remains blocked
+
+For Facebook only, explicit local development mode can store a user token and Page token in the local SQLite `platform_tokens` table with `encryption_status=insecure_dev_only`. That can create a connected Facebook Page account for the guarded Publish Queue path, but it is not production-safe.
 
 Future secure storage work should add:
 
@@ -177,7 +179,7 @@ A future secure implementation should:
 - require explicit development-only opt-in before any insecure local token experiment
 - keep frontend DTOs limited to safe account status and scope metadata
 
-Real OAuth should remain off until this storage path is implemented and tested.
+Real OAuth should remain off for non-Facebook platforms until secure storage is implemented and tested. For personal Facebook testing, use `insecure_dev_only` only after reading `docs/facebook-real-use.md`.
 
 ## How To Test
 

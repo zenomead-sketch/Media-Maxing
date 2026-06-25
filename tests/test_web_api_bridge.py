@@ -38,6 +38,7 @@ class WebApiBridgeTest(unittest.TestCase):
         for route in (
             "/api/analytics/snapshots",
             "/api/analytics/mock",
+            "/api/analytics/meta-sync",
             "/api/weekly-reports",
             "/api/ai-memory/refresh",
             "/api/ai-memory/",

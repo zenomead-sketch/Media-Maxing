@@ -4,6 +4,8 @@ This guide explains the first safe path for using a real Facebook connection wit
 
 Facebook real OAuth, Page discovery, and a first guarded Facebook text or single-image post path are prepared for local testing. Real publishing is still disabled by default. It only runs when you explicitly configure real OAuth, real network calls, real publishing flags, a Facebook Page token, a ready Publish Queue item, and the typed confirmation phrase.
 
+The local API also issues a fresh one-time publish nonce when the browser checks Facebook posting readiness. The Publish Queue sends that nonce back with the typed confirmation phrase. This is an extra local safety check; the real protection is still the server-side gate that verifies flags, preflight, account scopes, Page token availability, emergency pause, and queue state.
+
 ## What Works Now
 
 - Build a real Meta OAuth authorization URL for Facebook when real OAuth flags are enabled.
@@ -23,7 +25,7 @@ Facebook real OAuth, Page discovery, and a first guarded Facebook text or single
 - Facebook auto-posting or batch publishing.
 - Auto-posting.
 - Comment replies.
-- Analytics fetching.
+- Broad analytics fetching by default. Guarded Meta analytics sync is documented separately and still requires explicit setup.
 - Token refresh.
 - Long-lived token exchange.
 - Production-grade secure token storage.
@@ -32,27 +34,33 @@ Facebook real OAuth, Page discovery, and a first guarded Facebook text or single
 
 1. Go to Meta for Developers and create or select an app.
 2. Add Facebook Login or Facebook Login for Business, depending on your app setup.
-3. Add this redirect URI:
+3. Add the redirect URI for the local API you are actually running.
+
+If you use the default all-local beta launcher, use:
+
+```text
+http://127.0.0.1:8044/api/connect/facebook/callback
+```
+
+If you use the Vercel UI with the local companion launcher, or you run
+`apps.api.local_server --port 8000`, use:
 
 ```text
 http://localhost:8000/api/connect/facebook/callback
 ```
 
-4. Add the Facebook Page permissions needed for connection testing:
+If you use Vercel only for the frontend, the redirect is still the local companion API callback, not the Vercel page URL. The URL in Meta, `.env`, and the local API start flow must match exactly.
+
+4. Add the Facebook Page permissions needed for the guarded connection and posting path:
 
 ```text
 pages_show_list
 pages_manage_metadata
 pages_read_engagement
-```
-
-The guarded Facebook posting path also needs:
-
-```text
 pages_manage_posts
 ```
 
-Do not rely on this permission until your Meta app is configured correctly and you are testing on a Page you control.
+Do not rely on these permissions until your Meta app is configured correctly and you are testing on a Page you control. If you previously connected without one of these permissions, use **Reconnect real** in Connected Accounts. The app includes Meta's permission re-request parameter so the provider can ask again for missing or declined scopes.
 
 ## Configure `.env`
 
@@ -67,13 +75,19 @@ TOKEN_STORAGE_MODE=placeholder_not_stored
 
 META_CLIENT_ID=your-meta-client-id
 META_CLIENT_SECRET=your-meta-client-secret
-META_REDIRECT_URI=http://localhost:8000/api/connect/facebook/callback
+META_REDIRECT_URI=http://127.0.0.1:8044/api/connect/facebook/callback
 META_GRAPH_API_VERSION=v25.0
 META_ENABLE_REAL_OAUTH=true
 META_ENABLE_REAL_PUBLISHING=false
 ```
 
 Never commit `.env`.
+
+Use the same `META_REDIRECT_URI` value that you added in the Meta developer app. For Vercel UI plus local companion mode, that is usually `http://localhost:8000/api/connect/facebook/callback`.
+
+## Do Not Add The Facebook JavaScript SDK
+
+Do not paste the Facebook JavaScript SDK snippet into this app. Media Maxing uses a server-side OAuth redirect through the local Python API so the client secret, authorization code, access tokens, and Page tokens stay out of the browser.
 
 For guarded Facebook post testing, you must intentionally change both publishing flags:
 
@@ -109,10 +123,13 @@ The current guarded Facebook post service requires this development-only token m
 ## Test The Connection
 
 1. Start the local app/API.
-2. Open **Connected Accounts** or **Social Integration Setup**.
-3. Use Facebook real OAuth only after the environment shows ready.
-4. Complete the Meta login in the browser.
-5. Return to the app and run **Check connection**.
+2. Open **Control Center**.
+3. Review **Facebook posting setup**. This panel checks the local API, feature flags, Facebook Page account, required Page permissions, token storage, ready queue item, and final confirmation gate.
+4. If the panel says the account is mock/demo, open **Connected Accounts**.
+5. Confirm Facebook shows **Connect real** enabled. If it is disabled, open **Social Integration Setup** and fix the missing env vars or flags first.
+6. Click **Connect real** for Facebook. This starts server-side OAuth through the local API and redirects to Meta.
+7. Complete the Meta login in the browser and allow the required Page permissions.
+8. Return to the app and run **Check connection**.
 
 Expected safe result:
 
@@ -120,6 +137,7 @@ Expected safe result:
 - The health check can identify a Page when mocked or when real discovery has a usable token.
 - No token values appear in the UI.
 - Real publishing remains locked unless the publishing flags and queue gates are explicitly enabled.
+- Demo/mock Facebook accounts are clearly blocked from real posting.
 
 ## Publishing A Facebook Post With Caption And Media
 
@@ -136,12 +154,17 @@ Before using **Publish to Facebook (real)** in Publish Queue, confirm:
 2. The approved draft was scheduled locally.
 3. The Publish Queue item is `ready`.
 4. Preflight is `passed` or `warnings`, with no blocking errors.
-5. The connected account is a Facebook Page account with `pages_manage_posts`.
-6. Emergency pause is off.
-7. The local API bridge is running.
-8. The queue item has a caption snapshot.
-9. If media should be included, the scheduled item has exactly one linked image file in the local Media Library.
-10. You are willing to create a real Facebook Page post.
+5. The connected account is a real Facebook Page account, not a demo/mock account.
+6. The connected Page has required scopes:
+   - `pages_show_list`
+   - `pages_manage_metadata`
+   - `pages_read_engagement`
+   - `pages_manage_posts`
+7. Emergency pause is off.
+8. The local API bridge is running.
+9. The queue item has a caption snapshot.
+10. If media should be included, the scheduled item has exactly one linked image file in the local Media Library.
+11. You are willing to create a real Facebook Page post.
 
 The app then asks you to type:
 
@@ -178,7 +201,7 @@ Meta documentation changes. Before relying on real Facebook posting, verify:
 - App review requirements.
 - Rate limits and error codes.
 
-Current public Meta docs indicate the Graph API latest version is `v25.0`, the Pages API supports Page content operations, and Pages API setup uses Page listing/access-token flows. Verify again before serious use.
+As of June 24, 2026, current public Meta docs indicate the Graph API latest version is `v25.0`, the Pages API supports Page content operations, and Pages API setup uses Page listing/access-token flows. Verify again before serious use.
 
 ## Verification Commands
 

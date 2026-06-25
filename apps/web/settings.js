@@ -6,6 +6,7 @@
   const BACKUP_STORAGE_KEY = "local-social-ai-manager.backupHistory";
   const DIAGNOSTICS_STORAGE_KEY = "local-social-ai-manager.diagnostics";
   const RECENT_ERRORS_STORAGE_KEY = "local-social-ai-manager.recentErrors";
+  const SIMPLE_MODE_STORAGE_KEY = "local-social-ai-manager.simpleMode";
   const BRAND_STORAGE_KEY = "local-social-ai-manager.brandBrain";
   const MEDIA_STORAGE_KEY = "local-social-ai-manager.mediaLibrary";
   const SCHEDULED_POSTS_KEY = "local-social-ai-manager.scheduledPosts";
@@ -290,12 +291,12 @@
       setupStatus: "mock_ready",
       accountType: "page",
       capabilities: ["Connect", "Read profile later", "Manual export fallback"],
-      requiredScopes: ["pages_show_list", "pages_read_engagement"],
+      requiredScopes: ["pages_show_list", "pages_manage_metadata", "pages_read_engagement", "pages_manage_posts"],
       missingScopes: ["real_oauth_not_configured"],
       setupInstructions: [
         "Use mock connect for local UI testing.",
-        "Future real Meta OAuth must run server-side and pass app review where required.",
-        "Publishing disabled in this build.",
+        "For real posting, connect a Facebook Page through the local API. The provider login asks again for missing permissions.",
+        "Real Facebook Page posting still uses the guarded Publish Queue action and typed confirmation.",
       ],
       requiredEnvVars: ["META_CLIENT_ID", "META_CLIENT_SECRET", "META_REDIRECT_URI"],
       optionalEnvVars: ["META_GRAPH_API_VERSION", "META_ENABLE_REAL_OAUTH", "META_ENABLE_REAL_PUBLISHING"],
@@ -443,6 +444,25 @@
 
   function activeApiBridge() {
     return window.localApiBridge?.available ? window.localApiBridge : null;
+  }
+
+  function defaultConnectRedirectUri(platform) {
+    const bridgeOrigin = activeApiBridge()?.apiOrigin;
+    let origin = bridgeOrigin || "";
+    if (!origin) {
+      try {
+        const current = new URL(window.location.href);
+        const loopbackHosts = ["127.0.0.1", "localhost", "::1", "[::1]"];
+        if (["http:", "https:"].includes(current.protocol) && loopbackHosts.includes(current.hostname)) {
+          origin = current.origin;
+        }
+      } catch (error) {
+        origin = "";
+      }
+    }
+    // Vercel companion mode commonly uses 8000; the all-local beta launcher uses the current loopback origin.
+    const safeOrigin = origin || "http://127.0.0.1:8000";
+    return `${safeOrigin.replace(/\/$/, "")}/api/connect/${platform}/callback`;
   }
 
   async function persistThroughApi(path, body) {
@@ -2318,6 +2338,104 @@
     }
   }
 
+  function fallbackFacebookReadiness() {
+    return {
+      summaryId: "facebook_posting_steps_browser_fallback",
+      ready: false,
+      status: "blocked",
+      headline: "Facebook posting setup",
+      summary: "Start the local API bridge to check Facebook Page permissions, server-side token storage, and ready queue items.",
+      steps: [
+        {
+          id: "local_api",
+          label: "Local API bridge",
+          status: "blocked",
+          summary: "The browser cannot safely inspect server-side Facebook setup by itself.",
+          actionLabel: "Open Diagnostics",
+          href: "#diagnostics",
+          codes: ["local_api_required"],
+        },
+        {
+          id: "owner_confirmation",
+          label: "Owner confirmation",
+          status: "ready",
+          summary: `A real Facebook post still requires typing ${FACEBOOK_PUBLISH_CONFIRMATION}.`,
+          actionLabel: "Open Publish Queue",
+          href: "#queue",
+          codes: [],
+        },
+      ],
+      blockerCodes: ["local_api_required"],
+      warningCodes: [],
+      readyQueueItemCount: 0,
+      confirmationPhrase: FACEBOOK_PUBLISH_CONFIRMATION,
+      nextAction: {
+        label: "Open Diagnostics",
+        href: "#diagnostics",
+        summary: "Start the localhost API bridge before checking Facebook posting readiness.",
+      },
+      safetyNote: "No autonomous posting. Facebook posting stays guarded by local API checks and typed confirmation.",
+    };
+  }
+
+  async function getFacebookReadiness() {
+    const bridge = activeApiBridge();
+    if (!bridge) {
+      return fallbackFacebookReadiness();
+    }
+    try {
+      return await bridge.request("/api/facebook-publishing/readiness");
+    } catch (error) {
+      recordFriendlyError(error, "facebook_readiness");
+      return {
+        ...fallbackFacebookReadiness(),
+        summary: error.message || "Facebook readiness could not be checked.",
+        blockerCodes: ["facebook_readiness_unavailable"],
+      };
+    }
+  }
+
+  function facebookStepStatusClass(status) {
+    if (status === "ready") return "safe";
+    if (status === "warning") return "mock-mode";
+    return "needs-review";
+  }
+
+  function facebookReadinessStepMarkup(step) {
+    return `
+      <article class="control-task-row facebook-readiness-step">
+        <div>
+          <span class="card-status ${escapeHtml(facebookStepStatusClass(step.status))}">${escapeHtml(formatStatus(step.status))}</span>
+          <strong>${escapeHtml(step.label || "Facebook setup step")}</strong>
+          <p>${escapeHtml(step.summary || "")}</p>
+        </div>
+        <a class="secondary-button link-button" href="${escapeHtml(step.href || "#setup")}">${escapeHtml(step.actionLabel || "Open")}</a>
+      </article>
+    `;
+  }
+
+  async function renderFacebookReadiness() {
+    const panel = getElement("facebook-readiness-panel");
+    const list = getElement("facebook-readiness-list");
+    const status = getElement("facebook-readiness-status");
+    const summary = getElement("facebook-readiness-summary");
+    const action = getElement("facebook-readiness-action");
+    const note = getElement("facebook-readiness-note");
+    if (!panel || !list || !status || !summary || !action) {
+      return;
+    }
+    const readiness = await getFacebookReadiness();
+    status.className = `card-status ${readiness.ready ? "safe" : "needs-review"}`;
+    status.textContent = readiness.ready ? "Ready after confirmation" : "Setup needed";
+    summary.textContent = readiness.summary || "Facebook readiness checked locally.";
+    action.href = readiness.nextAction?.href || "#connected";
+    action.textContent = readiness.nextAction?.label || "Fix next step";
+    list.innerHTML = (readiness.steps || []).map(facebookReadinessStepMarkup).join("");
+    if (note) {
+      note.textContent = readiness.safetyNote || `No autonomous posting. Type ${FACEBOOK_PUBLISH_CONFIRMATION} before any real Facebook post.`;
+    }
+  }
+
   function activeScheduledPost(post) {
     return !["canceled", "completed", "failed"].includes(post.status);
   }
@@ -2721,6 +2839,7 @@
       href: "#safety",
       actionText: "Open",
     });
+    renderFacebookReadiness();
     renderSetupChecklist();
   }
 
@@ -4086,7 +4205,7 @@
       }
     }
 
-    accountWarnings.push("real_publishing_disabled_by_policy: Real publishing disabled in this build.");
+    accountWarnings.push("real_publishing_disabled_by_policy: Broad real publishing is disabled unless the guarded Facebook Page path is fully configured.");
     return {
       accountCheckStatus,
       matchedSocialAccountId,
@@ -4330,8 +4449,7 @@
     const facebookCandidate =
       item.platform === "facebook" &&
       item.queueStatus === "ready" &&
-      ["passed", "warnings"].includes(item.preflightStatus) &&
-      item.realPublishingEligible;
+      ["passed", "warnings"].includes(item.preflightStatus);
     if (mockButton) {
       mockButton.disabled = processed || !item.mockPublishEnabled || item.preflightStatus !== "passed" || item.queueStatus !== "ready";
       mockButton.title = mockButton.disabled
@@ -4346,8 +4464,8 @@
       facebookButton.title = !bridge
         ? "Real Facebook publishing requires the local API bridge."
         : facebookButton.disabled
-          ? "Facebook publishing requires a ready Facebook queue item with eligible account/preflight status."
-          : `Type ${FACEBOOK_PUBLISH_CONFIRMATION} to publish through the guarded local API.`;
+          ? "Facebook publishing requires a ready Facebook queue item with passed/warning preflight. The local API will run final account, token, flag, and pause gates."
+          : `Type ${FACEBOOK_PUBLISH_CONFIRMATION} to publish through the guarded local API. Final server gates still apply.`;
     }
     if (cancelButton) {
       cancelButton.disabled = processed;
@@ -4395,7 +4513,7 @@
     getElement("queue-detail-manual-export").textContent = manualExportEligible ? "Available when preflight has no blocking errors" : "Blocked by preflight or canceled state";
     getElement("queue-detail-real-publishing").textContent = item.realPublishingEligible
       ? `Facebook can publish only after local API gates pass and you type ${FACEBOOK_PUBLISH_CONFIRMATION}`
-      : "Real publishing is locked unless Facebook flags, account scopes, preflight, and confirmation pass.";
+      : "Facebook can be attempted only from a ready queue item through the local API; the server still checks flags, account scopes, Page token, preflight, emergency pause, and confirmation.";
     getElement("queue-detail-mock-publish").textContent = mockPublishEligible ? "Mock/demo eligible when queue is ready" : "Not mock-ready";
     getElement("queue-detail-scheduled").textContent = post ? `${post.id} (${formatStatus(post.status)})` : "Missing scheduled post";
     getElement("queue-detail-draft").textContent = item.generatedPostId || "-";
@@ -4465,13 +4583,22 @@
     const missingScopes = account ? account.missingScopes : config.missingScopes;
     const grantedScopes = account ? account.grantedScopes : [];
     const canMockConnect = mockConnectPlatformIds.includes(config.id);
-    const connectLabel = canMockConnect ? "Connect mock" : "Connect later";
-    const connectDisabled = account || !canMockConnect ? " disabled" : "";
+    const setupStatus = validateIntegrationSetupConfig().platforms.find((item) => item.id === config.id) || config;
+    const realOAuthReady = Boolean(activeApiBridge() && setupStatus.realOAuthAvailable);
+    const realConnectLabel = account ? "Reconnect real" : "Connect real";
+    const realConnectDisabled = realOAuthReady ? "" : " disabled";
+    const realConnectTitle = realOAuthReady
+      ? "Start server-side OAuth. Tokens and secrets stay out of the browser."
+      : "Real OAuth needs the local API, env vars, and real OAuth flags first.";
+    const publishingStatusCopy = config.id === "facebook"
+      ? "Guarded Facebook posting requires queue confirmation"
+      : "Posting disabled in this build";
+    const mockConnectDisabled = account || !canMockConnect ? " disabled" : "";
     const disconnectButton = account
       ? `<button class="secondary-button" type="button" data-connected-action="disconnect" data-account-id="${escapeHtml(account.id)}">Disconnect</button>`
       : "";
     const reconnectButton = account
-      ? `<button class="secondary-button" type="button" data-connected-action="reconnect" data-platform="${escapeHtml(config.id)}">Reconnect later</button>`
+      ? `<button class="secondary-button" type="button" data-connected-action="real-connect" data-platform="${escapeHtml(config.id)}"${realConnectDisabled} title="${escapeHtml(realConnectTitle)}">Reconnect real</button>`
       : "";
     const validateButton = account
       ? `<button class="secondary-button" type="button" data-connected-action="validate" data-account-id="${escapeHtml(account.id)}">Check connection</button>`
@@ -4488,7 +4615,7 @@
         </div>
         <div class="connected-status-row">
           <span class="card-status ${account ? "local-only" : "mock-mode"}">${escapeHtml(formatStatus(status))}</span>
-          <span class="card-status needs-review">Publishing disabled in this build</span>
+          <span class="card-status needs-review">${escapeHtml(publishingStatusCopy)}</span>
         </div>
         <dl class="connected-platform-details">
           <div><dt>Connection health</dt><dd>${account ? escapeHtml(formatStatus(account.healthStatus || "not_checked")) : "Not connected"}</dd></div>
@@ -4497,7 +4624,8 @@
           <div><dt>Missing scopes</dt><dd>${escapeHtml(missingScopes.length ? missingScopes.join(", ") : "None")}</dd></div>
         </dl>
         <div class="calendar-actions">
-          <button class="primary-button" type="button" data-connected-action="connect" data-platform="${escapeHtml(config.id)}"${connectDisabled}>${connectLabel}</button>
+          <button class="primary-button" type="button" data-connected-action="real-connect" data-platform="${escapeHtml(config.id)}"${realConnectDisabled} title="${escapeHtml(realConnectTitle)}">${realConnectLabel}</button>
+          <button class="secondary-button" type="button" data-connected-action="connect" data-platform="${escapeHtml(config.id)}"${mockConnectDisabled}>Connect mock</button>
           ${disconnectButton}
           ${reconnectButton}
           ${validateButton}
@@ -4535,7 +4663,7 @@
         <div class="calendar-actions">
           <button class="secondary-button" type="button" data-connected-action="validate" data-account-id="${escapeHtml(account.id)}">Check connection</button>
           <button class="secondary-button" type="button" data-connected-action="disconnect" data-account-id="${escapeHtml(account.id)}"${account.connectionStatus === "disconnected" ? " disabled" : ""}>Disconnect</button>
-          <button class="secondary-button" type="button" data-connected-action="reconnect" data-platform="${escapeHtml(account.platform)}">Reconnect placeholder</button>
+          <button class="secondary-button" type="button" data-connected-action="real-connect" data-platform="${escapeHtml(account.platform)}">Reconnect real</button>
         </div>
       </article>
     `;
@@ -4659,6 +4787,40 @@
     });
     setConnectedMessage("success", `${config.label} mock connection saved locally. Real publishing stays locked by default.`);
     renderConnectedAccounts();
+  }
+
+  async function startRealOAuthPlatform(platform) {
+    const config = platformConfig(platform);
+    const bridge = activeApiBridge();
+    if (!bridge) {
+      setConnectedMessage("error", "Real OAuth requires the local API. Start the local launcher, then try Connect real again.");
+      return;
+    }
+    const setupStatus = validateIntegrationSetupConfig().platforms.find((item) => item.id === config.id) || config;
+    if (!setupStatus.realOAuthAvailable) {
+      setConnectedMessage("error", `${config.label} real OAuth is not ready. Check Social Integration Setup for missing env vars or disabled flags.`);
+      showConnectedSetupInstructions(config.id);
+      return;
+    }
+    if (!window.confirm(`Start real ${config.label} OAuth now? This opens the provider login. Secrets and tokens stay server-side, and posting still requires approval plus typed confirmation.`)) {
+      return;
+    }
+    try {
+      const result = await bridge.request(`/api/connect/${encodeURIComponent(config.id)}/start`, {
+        method: "POST",
+        body: {
+          redirectUri: setupStatus.redirectUri,
+          requestedScopes: config.requiredScopes,
+        },
+      });
+      if (!result.success || !result.authorizationUrl) {
+        throw new Error(result.message || `${config.label} real OAuth could not start.`);
+      }
+      setConnectedMessage("success", `${config.label} real OAuth is opening. If Meta asks for permissions, allow the required Page scopes.`);
+      window.location.assign(result.authorizationUrl);
+    } catch (error) {
+      setConnectedMessage("error", error.message || `${config.label} real OAuth could not start.`);
+    }
   }
 
   async function validateConnectedAccount(accountId) {
@@ -4922,7 +5084,7 @@
       displayValue: maskSetupValue(name, environment[name]),
       secret: name.includes("SECRET") || name.includes("TOKEN"),
     }));
-    const fallbackRedirect = `http://localhost:8000/api/connect/${config.id}/callback`;
+    const fallbackRedirect = defaultConnectRedirectUri(config.id);
     return {
       ...config,
       status,
@@ -4939,7 +5101,9 @@
           : "Required env vars are present locally.",
         "Confirm the redirect URI in the provider developer app.",
         "Run a mock connection test before real OAuth work.",
-        "Keep real publishing disabled until a future safety-gated batch.",
+        config.id === "facebook"
+          ? "Keep broad real publishing disabled; guarded Facebook Page posting still requires Publish Queue confirmation."
+          : "Keep real publishing disabled until a future safety-gated platform task.",
       ],
     };
   }
@@ -4959,7 +5123,7 @@
         envVars: Object.values(safeStatus.envVars || {}),
         checklist: safeStatus.checklist || config.setupInstructions,
         docsLinks: safeStatus.docsLinks || config.docsLinks,
-        redirectUri: safeStatus.redirectUri || `http://localhost:8000/api/connect/${config.id}/callback`,
+        redirectUri: safeStatus.redirectUri || defaultConnectRedirectUri(config.id),
         realPublishingAvailable: false,
       };
     });
@@ -5056,7 +5220,9 @@
     getElement("social-setup-real-oauth").textContent = selected.realOAuthAvailable
       ? "Real OAuth configured, still guarded"
       : "Real OAuth unavailable or disabled";
-    getElement("social-setup-real-publishing").textContent = "Real publishing disabled in this build";
+    getElement("social-setup-real-publishing").textContent = selected.id === "facebook"
+      ? "Broad publishing disabled; guarded Facebook Page posting can be enabled after setup"
+      : "Real publishing disabled in this build";
     getElement("social-setup-env-list").innerHTML = selected.envVars
       .map((envVar) => `
         <div class="setup-env-row">
@@ -5130,6 +5296,9 @@
     const action = button.dataset.connectedAction;
     if (action === "connect") {
       mockConnectPlatform(button.dataset.platform);
+    }
+    if (action === "real-connect") {
+      startRealOAuthPlatform(button.dataset.platform);
     }
     if (action === "disconnect") {
       disconnectConnectedAccount(button.dataset.accountId);
@@ -5458,13 +5627,24 @@
       setQueueMessage("error", "Facebook publishing requires ready queue status and passed/warning preflight.");
       return;
     }
-    if (!item.realPublishingEligible) {
-      setQueueMessage("error", "Facebook publishing is not eligible yet. Check account scopes, preflight, and real publishing flags.");
-      return;
-    }
     const bridge = activeApiBridge();
     if (!bridge) {
       setQueueMessage("error", "Start the local API bridge before using guarded Facebook publishing.");
+      return;
+    }
+    let readiness;
+    try {
+      readiness = await bridge.request("/api/facebook-publishing/readiness");
+    } catch (error) {
+      setQueueMessage("error", error.message || "Facebook posting readiness could not be checked.");
+      return;
+    }
+    if (!readiness?.ready || !readiness?.publishNonce) {
+      setQueueMessage(
+        "error",
+        readiness?.summary || "Facebook posting is not ready yet. Check the Facebook posting setup panel.",
+      );
+      renderFacebookReadiness();
       return;
     }
     const phrase = window.prompt(
@@ -5477,7 +5657,7 @@
     try {
       const result = await bridge.request(`/api/publish-queue/${encodeURIComponent(item.id)}/publish-facebook`, {
         method: "POST",
-        body: { confirmationPhrase: phrase },
+        body: { confirmationPhrase: phrase, publishNonce: readiness.publishNonce },
       });
       await bridge.sync();
       setQueueMessage(
@@ -6336,6 +6516,37 @@
       : "home";
   }
 
+  function simpleModeEnabled() {
+    return window.localStorage.getItem(SIMPLE_MODE_STORAGE_KEY) !== "false";
+  }
+
+  function applySimpleMode(enabled) {
+    document.body.classList.toggle("simple-mode", enabled);
+    const toggle = getElement("simple-mode-toggle");
+    if (toggle) {
+      toggle.setAttribute("aria-pressed", String(enabled));
+      toggle.querySelector("span").textContent = enabled ? "Owner Mode" : "Dashboard Mode";
+      toggle.querySelector("small").textContent = enabled
+        ? "Simple daily path is on"
+        : "All setup/admin areas stay expanded";
+    }
+  }
+
+  function setupSimpleMode() {
+    applySimpleMode(simpleModeEnabled());
+    getElement("simple-mode-toggle")?.addEventListener("click", () => {
+      const nextEnabled = !simpleModeEnabled();
+      window.localStorage.setItem(SIMPLE_MODE_STORAGE_KEY, String(nextEnabled));
+      applySimpleMode(nextEnabled);
+      document.querySelectorAll(".nav-group").forEach((group) => {
+        const hasActiveLink = Boolean(group.querySelector(".nav-link.active"));
+        if (nextEnabled && !hasActiveLink && !group.classList.contains("daily-nav-group")) {
+          group.open = false;
+        }
+      });
+    });
+  }
+
   function setupRouting() {
     const links = document.querySelectorAll(".nav-link");
     const views = document.querySelectorAll(".route-view");
@@ -6360,7 +6571,11 @@
       document.querySelectorAll(".nav-group").forEach((group) => {
         const hasActiveLink = Boolean(group.querySelector(".nav-link.active"));
         group.classList.toggle("active", hasActiveLink);
-        group.open = hasActiveLink || (route === "home" && Boolean(group.querySelector('a[href="#generate"]')));
+        if (simpleModeEnabled()) {
+          group.open = hasActiveLink || group.classList.contains("daily-nav-group");
+        } else {
+          group.open = hasActiveLink || (route === "home" && Boolean(group.querySelector('a[href="#generate"]')));
+        }
       });
     }
 
@@ -6719,6 +6934,7 @@
   }
 
   document.addEventListener("DOMContentLoaded", () => {
+    setupSimpleMode();
     setupRouting();
     setupMediaLibrary();
     setupCalendar();
@@ -6731,6 +6947,7 @@
     setupDiagnostics();
     setupSettingsForm();
     setupBrandBrainForm();
+    getElement("facebook-readiness-refresh")?.addEventListener("click", renderFacebookReadiness);
     renderControlCenter();
     maybeRouteToOnboarding();
     window.addEventListener("local-api-ready", () => {

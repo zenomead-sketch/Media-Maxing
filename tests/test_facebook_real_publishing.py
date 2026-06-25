@@ -9,6 +9,7 @@ from contextlib import closing
 from pathlib import Path
 from unittest.mock import patch
 
+from scripts.connectors.registry import get_connector
 from scripts.db.init_db import initialize_database
 from scripts.db.settings import update_app_settings
 from scripts.db.social_connections import create_mock_social_account
@@ -56,12 +57,13 @@ class FacebookRealPublishingTest(unittest.TestCase):
         account_status: str = "connected",
         token_mode: str = "insecure_dev_only",
         media_asset_ids: list[str] | None = None,
+        platform_account_id: str = "fb-page-123",
     ) -> tuple[str, str, str, str]:
         account_id = create_mock_social_account(
             db_path,
             platform="facebook",
             display_name="Real Test Facebook Page",
-            platform_account_id="fb-page-123",
+            platform_account_id=platform_account_id,
             account_type="page",
             connection_status=account_status,
             granted_scopes=[
@@ -126,7 +128,7 @@ class FacebookRealPublishingTest(unittest.TestCase):
                     "2026-06-14T13:00:00Z",
                     "America/New_York",
                     "Approved Facebook post ready for real publish.",
-                    "fb-page-123",
+                    platform_account_id,
                 ),
             )
             if media_asset_ids:
@@ -229,6 +231,33 @@ class FacebookRealPublishingTest(unittest.TestCase):
                 ).publish_queue_item("queue-facebook-real", confirmation_phrase="publish")
 
         self.assertIn("confirmation_required", error.exception.error_codes)
+        self.assertEqual(called["count"], 0)
+
+    def test_direct_connector_publish_requires_guarded_service_context(self):
+        called = {"count": 0}
+
+        def fail_if_called(request, timeout):
+            called["count"] += 1
+            raise AssertionError("direct connector call must not reach network")
+
+        result = get_connector("facebook").publishText(
+            {
+                "pageId": "fb-page-123",
+                "message": "Do not publish directly.",
+                "pageAccessToken": "facebook-page-token-must-not-leak",
+            },
+            http_client_config=PlatformHttpClientConfig(
+                provider="meta",
+                platform="facebook",
+                safetyMode=NetworkSafetyMode.ENABLED,
+                allowNetwork=True,
+                transport=fail_if_called,
+            ),
+        )
+
+        self.assertFalse(result.success)
+        self.assertEqual(result.status, "disabled_by_policy")
+        self.assertEqual(result.metadata["reason"], "missing_guarded_service_context")
         self.assertEqual(called["count"], 0)
 
     def test_emergency_pause_blocks_real_facebook_publish(self):
@@ -434,6 +463,50 @@ class FacebookRealPublishingTest(unittest.TestCase):
 
         self.assertEqual(called["count"], 0)
         self.assertIn("media_file_missing", error.exception.error_codes)
+
+    def test_readiness_summary_explains_blockers_without_leaking_tokens(self):
+        db_path = self._database()
+        self._ready_queue(db_path, token_mode="placeholder_not_stored")
+
+        with patch.dict(
+            os.environ,
+            self._env(TOKEN_STORAGE_MODE="placeholder_not_stored", ALLOW_INSECURE_TOKEN_STORAGE="false"),
+            clear=True,
+        ):
+            summary = FacebookPublishingService(db_path).get_readiness_summary()
+
+        serialized = json.dumps(summary)
+        self.assertFalse(summary["ready"])
+        self.assertIn("facebook_posting_steps", summary["summaryId"])
+        self.assertIn("server_token_unavailable", summary["blockerCodes"])
+        self.assertNotIn("facebook-page-token-must-not-leak", serialized)
+        self.assertNotIn("encrypted_access_token", serialized)
+        self.assertNotIn("encryptedRefreshToken", serialized)
+        self.assertTrue(any(step["id"] == "page_token" for step in summary["steps"]))
+        self.assertEqual(summary["nextAction"]["href"], "#connected")
+
+    def test_readiness_summary_marks_ready_when_all_local_gates_pass(self):
+        db_path = self._database()
+        self._ready_queue(db_path)
+
+        with patch.dict(os.environ, self._env(), clear=True):
+            summary = FacebookPublishingService(db_path).get_readiness_summary()
+
+        self.assertTrue(summary["ready"])
+        self.assertEqual(summary["nextAction"]["href"], "#queue")
+        self.assertEqual(summary["readyQueueItemCount"], 1)
+        self.assertIn("PUBLISH TO FACEBOOK", summary["confirmationPhrase"])
+
+    def test_mock_facebook_page_id_is_called_out_as_not_real_ready(self):
+        db_path = self._database()
+        self._ready_queue(db_path, platform_account_id="mock-facebook-page-1")
+
+        with patch.dict(os.environ, self._env(), clear=True):
+            summary = FacebookPublishingService(db_path).get_readiness_summary()
+
+        self.assertFalse(summary["ready"])
+        self.assertIn("mock_facebook_account", summary["blockerCodes"])
+        self.assertEqual(summary["nextAction"]["href"], "#connected")
 
 
 if __name__ == "__main__":

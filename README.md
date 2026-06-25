@@ -27,6 +27,11 @@ python -m scripts.local_beta_launcher
 This starts the local API and web app together and opens Control Center at
 `http://127.0.0.1:8044/#home`. Real replies and most social APIs stay disabled; guarded Facebook Page text or single-image publishing stays locked unless you explicitly enable the flags described in `docs/facebook-real-use.md`.
 
+Control Center is the daily screen. Owner Mode is enabled by default so setup
+and advanced tools stay tucked away unless you need them. Start with the
+Plug-and-play path: **Add media → Create media post → Approve locally → Post or
+export**.
+
 To practice with clearly fake demo data:
 
 ```text
@@ -118,7 +123,7 @@ python -m scripts.qa.integration_security_scan .
 
 ## Mock Mode
 
-Mock mode is the default safe path. It supports mock AI generation, mock OAuth, mock analytics, mock engagement, and local-only workflow testing without API keys.
+Mock mode is the default safe path. It supports mock AI generation, mock OAuth, mock analytics, mock engagement, and local-only workflow testing without API keys. Facebook/Instagram analytics sync is available only after you configure Meta credentials, connect accounts with analytics scopes, allow the guarded local dev token mode, and run the local API companion.
 
 ## Local Or Cloud Generation
 
@@ -151,17 +156,27 @@ It does not support Facebook video, albums, carousels, reels, stories, personal 
 Real Facebook posting is disabled by default and requires all of these gates:
 
 - Real OAuth/network/publishing flags enabled in `.env`.
-- A connected Facebook Page account.
-- Page permissions including `pages_manage_posts`.
+- A real connected Facebook Page account, not a demo/mock account.
+- Page permissions including `pages_show_list`, `pages_manage_metadata`, `pages_read_engagement`, and `pages_manage_posts`.
+- Server-side Page token availability through the explicit local development token mode.
 - A ready Publish Queue item for Facebook.
 - Passed or warning-only preflight.
 - Emergency pause off.
 - Local API bridge running.
 - The exact typed confirmation phrase: `PUBLISH TO FACEBOOK`.
 
+Control Center includes a **Facebook posting setup** panel that checks these
+local gates and gives the next fix without showing token values.
+
 For image posts, the approved scheduled item must have exactly one linked local image in Media Library. The backend uploads that image from local storage to the Facebook Page photo endpoint with the generated caption. Multiple images or video should use **Manual Export** until those paths are built deliberately.
 
 See `docs/facebook-real-use.md` for the setup checklist, required environment flags, token-storage warning, and verification commands.
+
+## Guarded Meta Analytics Sync
+
+The Analytics screen can sync recent Facebook Page and Instagram Business/Creator post metrics after Meta credentials and connected accounts are configured. The browser UI does not contact Meta directly; it asks the local Python API to run a guarded server-side sync and save `platform_api` snapshots locally.
+
+This path requires real OAuth/network flags, a connected account, analytics scopes (`pages_read_engagement` for Facebook and `instagram_manage_insights` for Instagram), explicit local development token access, and the local companion server. Synced posts can be filtered by Facebook or Instagram, opened in a post detail panel, and inspected with attached media thumbnails when Meta returns image URLs. See `docs/analytics.md`.
 
 ## Main workflows
 
@@ -174,7 +189,7 @@ See `docs/facebook-real-use.md` for the setup checklist, required environment fl
 7. Run local jobs and preflight.
 8. Use Publish Queue and Manual Export.
 9. Optionally use guarded Facebook posting for approved Facebook queue items after real setup.
-10. Add manual analytics or generate mock analytics.
+10. Add manual analytics, generate mock analytics, or sync guarded Facebook/Instagram analytics after Meta setup.
 11. Generate mock engagement and local reply suggestions.
 12. Approve replies locally only.
 13. Generate AI memory and weekly reports.
@@ -228,7 +243,7 @@ The app is intended to help non-developer users:
 - Review, edit, approve, reject, or revise drafts.
 - Schedule approved drafts on a local content calendar.
 - Prepare a publish queue for manual export first.
-- Track analytics manually or with mock/demo data.
+- Track analytics manually, with mock/demo data, or through guarded Facebook/Instagram sync after Meta setup.
 - Manage engagement locally with AI-assisted reply suggestions.
 - Learn from approvals, rejections, engagement, and performance over time.
 
@@ -546,7 +561,7 @@ Current status:
 - Batch 7 analytics storage foundation now exists for snapshots, aggregate performance metrics, import audits, explainable content insights, AI memory, and weekly reports.
 - Safe fake demo analytics are labeled `mock`; the demo weekly report is labeled `ai_mock`.
 - Local analytics service now supports manual snapshots, deterministic mock metrics, latest-snapshot summaries, breakdowns, rankings, import audits, and rule-based insights.
-- Analytics Dashboard screen now supports SQLite-backed local summaries, filters, breakdowns, rankings, insight review actions, manual snapshots, and clearly labeled mock metric generation.
+- Analytics Dashboard screen now supports SQLite-backed local summaries, filters, breakdowns, rankings, post detail views with media, insight review actions, manual snapshots, clearly labeled mock metric generation, and guarded Facebook/Instagram sync saved as `platform_api`.
 - Engagement Inbox database foundation now supports local threads, triage fields, reply-suggestion records, approval audits, import audits, and idempotent fake inbox ingestion. Real comment fetching and reply sending remain disabled.
 - Local AI reply suggestions now use Brand Brain context, versioned prompt provenance, deterministic mock generation, local safety review, persisted history, and audit rows. Suggestions remain review-only and are never sent externally.
 - Local reply approval workflow now supports editing, local approval, rejection, manual-reply tracking, escalation, spam marking, archive actions, critical-flag blocking, and audit history. Approval never sends a platform reply.

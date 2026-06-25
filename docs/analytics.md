@@ -1,8 +1,8 @@
 # Analytics Foundation
 
-The analytics foundation stores local performance history for approved content. It does not fetch real platform analytics yet.
+The analytics foundation stores local performance history for approved content. It supports manual entry, clearly labeled mock/demo analytics, and a guarded Facebook/Instagram analytics sync through the local API companion when Meta credentials are configured.
 
-The local service is implemented in `scripts/services/analytics.py`.
+The local manual/mock service is implemented in `scripts/services/analytics.py`. Guarded Meta sync lives in `scripts/services/meta_analytics.py`.
 
 The static web shell includes an Analytics screen. When launched through the
 localhost bridge, manual snapshots, mock snapshots, and insight status updates
@@ -16,11 +16,12 @@ Every snapshot records its provenance:
 
 - `manual`: entered by the user.
 - `mock`: clearly fake demo data for development.
-- `platform_api`: reserved for future guarded platform integrations.
+- `platform_api`: real platform data synced through a guarded server-side integration after the account, scopes, local token mode, and Meta API response all allow it. Today this is limited to Facebook and Instagram through Meta Graph API.
 - `imported_csv`: imported from a user-selected local file.
 - `estimated`: explicitly labeled estimate.
 
 Mock and manual metrics must never be presented as live platform analytics.
+`platform_api` rows should still be described as locally stored synced metrics, not as a cloud dashboard.
 
 ## Local Tables
 
@@ -60,6 +61,47 @@ The performance score is capped at `100`. These formulas are intentionally simpl
 - Ranking top and underperforming posts.
 - Creating simple rule-based content insights.
 - Recording analytics import audits.
+
+## Guarded Meta Analytics Sync
+
+The Analytics screen includes **Sync Facebook / Instagram** when the local API bridge is available. The browser does not call Meta directly. It asks the local Python API to run `MetaAnalyticsService`, which can sync data only when local flags, connected accounts, scopes, token storage, and Meta API permissions are ready.
+
+The service:
+
+- verifies real OAuth and network flags are enabled;
+- reads only connected Facebook or Instagram accounts from local SQLite;
+- requires server-side account tokens that are available only in explicit local development token mode;
+- attempts to fetch recent Facebook Page posts or Instagram media through Meta Graph API;
+- stores a `published_posts` record for each external post;
+- stores an `analytics_snapshots` row with `source = platform_api`;
+- stores permalink, caption, posted time, metrics, and attached media references in `rawMetricsJson`;
+- writes an `analytics_imports` audit row.
+
+Required local flags for real Meta analytics sync:
+
+```text
+APP_ENV=development
+ALLOW_INSECURE_TOKEN_STORAGE=true
+INTEGRATIONS_MODE=real_oauth
+ENABLE_REAL_OAUTH=true
+ENABLE_REAL_NETWORK_CALLS=true
+META_ENABLE_REAL_OAUTH=true
+META_CLIENT_ID=...
+META_CLIENT_SECRET=...
+META_REDIRECT_URI=...
+META_GRAPH_API_VERSION=v20.0
+```
+
+The sync expects connected accounts with analytics-related scopes:
+
+- Facebook: `pages_show_list`, `pages_read_engagement`.
+- Instagram: `instagram_basic`, `instagram_manage_insights`.
+
+If an account is missing, expired, missing scopes, or missing a local server-side token, sync returns a safe error for that account. It does not expose tokens to the frontend.
+
+Important local-token warning: this first real-use path currently relies on `ALLOW_INSECURE_TOKEN_STORAGE=true` with `APP_ENV=development`, matching the guarded Facebook posting path. That is acceptable for personal local testing only. Before broader real-user use, replace this with OS keychain or encrypted token storage.
+
+The post detail panel on the Analytics screen can show synced Facebook/Instagram post media when Meta returns image URLs or thumbnails. Video media may appear as a link if only a media URL is available.
 
 Snapshots are cumulative point-in-time measurements. When several snapshots exist for one post, summaries use the latest matching snapshot instead of adding every snapshot together. This avoids double-counting a post as its metrics grow over time.
 
@@ -125,6 +167,8 @@ python -m scripts.db.seed_demo --database data/app.sqlite
 
 - CSV import parser.
 - AI-provider insight generation.
-- Real platform analytics sync.
+- Automatic background analytics sync.
+- Analytics sync for YouTube, TikTok, LinkedIn, X, or Threads.
+- Production token storage for unattended analytics sync.
 
-Real analytics APIs remain future work behind explicit integration safety gates.
+Real analytics sync remains opt-in and guarded. Real publishing and real reply sending are separate safety-gated features and are not enabled by the Analytics screen.

@@ -49,6 +49,16 @@ class WebLaunchPolishTests(unittest.TestCase):
         self.assertIn("What should I do next?", HTML)
         self.assertIn('href="#guide"', HTML)
         self.assertIn("<h1>Intro Setup Guide</h1>", HTML)
+        self.assertIn('id="simple-mode-toggle"', HTML)
+        self.assertIn('id="facebook-readiness-panel"', HTML)
+        self.assertIn("Facebook posting setup", HTML)
+        self.assertIn("Create media post", HTML)
+        self.assertIn("Owner Mode", HTML)
+        self.assertIn("Plug-and-play path", HTML)
+        self.assertIn("getFacebookReadiness", SETTINGS_JS)
+        self.assertIn("renderFacebookReadiness", SETTINGS_JS)
+        self.assertIn("local-social-ai-manager.simpleMode", SETTINGS_JS)
+        self.assertIn(".simple-mode", CSS)
 
     def test_accessibility_basics_are_present_for_launch(self):
         self.assertIn('class="skip-link" href="#app-main"', HTML)

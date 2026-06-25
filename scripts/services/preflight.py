@@ -273,7 +273,7 @@ class PreflightValidationService:
     ) -> PreflightValidationResult:
         errors: list[str] = []
         warnings: list[str] = [
-            "manual_export_only: Manual export is the safe path; real publishing remains disabled."
+            "manual_export_only: Manual export is the default safe path; Facebook real publishing requires explicit guarded flags."
         ]
         info: list[str] = []
 
@@ -379,9 +379,10 @@ class PreflightValidationService:
             brand_profile_id=scheduled_row["brand_profile_id"],
         )
         warnings.extend(account_readiness.accountWarnings)
-        warnings.append(
-            "real_publishing_disabled_by_policy: Future real publishing remains disabled in this build."
-        )
+        if not _facebook_real_publish_flags_enabled(platform):
+            warnings.append(
+                "real_publishing_disabled_by_policy: Broad real publishing remains disabled; only guarded Facebook Page posting can be enabled."
+            )
 
         if media_ids and requirement.altTextRecommendation:
             info.append("alt_text_recommended: " + requirement.altTextRecommendation)
@@ -471,6 +472,12 @@ class PreflightValidationService:
             if not requires_reauth:
                 account_errors.append("future_real_publish_blocked: Missing required account scopes.")
 
+        if platform == "facebook" and _looks_like_mock_account(account):
+            warnings.append(
+                "mock_connected_account: Demo/mock Facebook accounts cannot use real publishing."
+            )
+            account_errors.append("future_real_publish_blocked: Mock account cannot publish.")
+
         return AccountReadiness(
             accountCheckStatus=check_status,
             matchedSocialAccountId=account["id"],
@@ -516,6 +523,14 @@ class PreflightValidationService:
         mock_publish_eligible = manual_export_eligible and (
             os.environ.get("INTEGRATIONS_MODE", "mock").strip().lower() == "mock"
         )
+        real_publishing_eligible = (
+            platform == "facebook"
+            and not deduped_errors
+            and not account_readiness.accountErrors
+            and account_readiness.accountCheckStatus == "connected"
+            and not account_readiness.requiresReauth
+            and _facebook_real_publish_flags_enabled(platform)
+        )
         return PreflightValidationResult(
             status=status,
             errors=deduped_errors,
@@ -531,7 +546,7 @@ class PreflightValidationService:
             missingScopes=account_readiness.missingScopes,
             requiresReauth=account_readiness.requiresReauth,
             connectionStatus=account_readiness.connectionStatus,
-            realPublishingEligible=False,
+            realPublishingEligible=real_publishing_eligible,
             manualExportEligible=manual_export_eligible,
             mockPublishEligible=mock_publish_eligible,
         )
@@ -673,6 +688,27 @@ def _dedupe_messages(messages: list[str]) -> list[str]:
 
 def _message_code(message: str) -> str:
     return message.split(":", 1)[0]
+
+
+def _truthy(value: str | None) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _facebook_real_publish_flags_enabled(platform: str) -> bool:
+    if platform != "facebook":
+        return False
+    return (
+        (os.environ.get("INTEGRATIONS_MODE") or "mock").strip().lower() == "real_oauth"
+        and _truthy(os.environ.get("ENABLE_REAL_NETWORK_CALLS"))
+        and _truthy(os.environ.get("ENABLE_REAL_PUBLISHING"))
+        and _truthy(os.environ.get("META_ENABLE_REAL_PUBLISHING"))
+    )
+
+
+def _looks_like_mock_account(account: sqlite3.Row) -> bool:
+    values = [account["id"], account["platform_account_id"], account["display_name"]]
+    normalized = " ".join(str(value or "").lower() for value in values)
+    return "mock" in normalized or "demo" in normalized
 
 
 def _clean_text(value: Any) -> str:

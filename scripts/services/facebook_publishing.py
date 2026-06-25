@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from scripts.connectors.registry import get_connector
+from scripts.connectors.meta.facebook import GUARDED_FACEBOOK_PUBLISH_CONTEXT
 from scripts.db.init_db import initialize_database, resolve_database_path
 from scripts.db.settings import load_app_settings
 from scripts.services.platform_http_client import (
@@ -136,6 +137,7 @@ class FacebookPublishingService:
                         "imageBytes": publish_media.content,
                         "filename": publish_media.filename,
                         "contentType": publish_media.contentType,
+                        "guardedServiceContext": GUARDED_FACEBOOK_PUBLISH_CONTEXT,
                     },
                     http_client_config=self.http_client_config,
                 )
@@ -146,6 +148,7 @@ class FacebookPublishingService:
                         "pageId": account_row["platform_account_id"],
                         "message": scheduled_row["caption_snapshot"],
                         "pageAccessToken": page_token,
+                        "guardedServiceContext": GUARDED_FACEBOOK_PUBLISH_CONTEXT,
                     },
                     http_client_config=self.http_client_config,
                 )
@@ -212,6 +215,243 @@ class FacebookPublishingService:
             permalink=permalink,
             warnings=warnings,
         )
+
+    def get_readiness_summary(self) -> dict[str, Any]:
+        """Return a token-safe checklist for owner-facing Facebook setup.
+
+        This method performs local database and environment checks only. It
+        never calls Meta, never returns token values, and never attempts to
+        publish. The browser uses this to explain what is blocking the guarded
+        Facebook Page text/single-image path.
+        """
+        steps: list[dict[str, Any]] = []
+        blocker_codes: list[str] = []
+        warning_codes: list[str] = []
+
+        def add_step(
+            step_id: str,
+            label: str,
+            status: str,
+            summary: str,
+            *,
+            action_label: str,
+            href: str,
+            codes: list[str] | None = None,
+        ) -> None:
+            safe_codes = codes or []
+            if status == "blocked":
+                blocker_codes.extend(safe_codes)
+            elif status == "warning":
+                warning_codes.extend(safe_codes)
+            steps.append(
+                {
+                    "id": step_id,
+                    "label": label,
+                    "status": status,
+                    "summary": summary,
+                    "actionLabel": action_label,
+                    "href": href,
+                    "codes": safe_codes,
+                }
+            )
+
+        settings = load_app_settings(self.database_path)
+        if settings.emergencyPauseEnabled:
+            add_step(
+                "emergency_pause",
+                "Emergency pause",
+                "blocked",
+                "Emergency pause is on, so Facebook posting is blocked.",
+                action_label="Open Safety Center",
+                href="#safety",
+                codes=["emergency_pause_enabled"],
+            )
+        else:
+            add_step(
+                "emergency_pause",
+                "Emergency pause",
+                "ready",
+                "Emergency pause is off.",
+                action_label="Open Safety Center",
+                href="#safety",
+            )
+
+        env = os.environ
+        required_truthy = {
+            "ENABLE_REAL_PUBLISHING": env.get("ENABLE_REAL_PUBLISHING"),
+            "META_ENABLE_REAL_PUBLISHING": env.get("META_ENABLE_REAL_PUBLISHING"),
+            "ENABLE_REAL_NETWORK_CALLS": env.get("ENABLE_REAL_NETWORK_CALLS"),
+        }
+        missing_flags = [key for key, value in required_truthy.items() if not _truthy(value)]
+        integration_mode = (env.get("INTEGRATIONS_MODE") or "mock").strip().lower()
+        if integration_mode != "real_oauth":
+            missing_flags.append("INTEGRATIONS_MODE=real_oauth")
+        if missing_flags:
+            add_step(
+                "publishing_flags",
+                "Facebook posting flags",
+                "blocked",
+                "Real Facebook posting is still disabled in local environment flags.",
+                action_label="Open setup wizard",
+                href="#setup",
+                codes=["real_publishing_disabled", *missing_flags],
+            )
+        else:
+            add_step(
+                "publishing_flags",
+                "Facebook posting flags",
+                "ready",
+                "Required local real OAuth/network/publishing flags are enabled.",
+                action_label="Open setup wizard",
+                href="#setup",
+            )
+
+        account_row = self._best_facebook_account()
+        if account_row is None:
+            add_step(
+                "facebook_account",
+                "Facebook Page account",
+                "blocked",
+                "No connected Facebook Page account was found.",
+                action_label="Open Connected Accounts",
+                href="#connected",
+                codes=["missing_facebook_account"],
+            )
+        else:
+            account_status = str(account_row["connection_status"] or "unknown")
+            requires_reauth = bool(account_row["requires_reauth"])
+            if account_status != "connected" or requires_reauth:
+                add_step(
+                    "facebook_account",
+                    "Facebook Page account",
+                    "blocked",
+                    f"Facebook account status is {account_status}; reconnect before posting.",
+                    action_label="Reconnect Facebook",
+                    href="#connected",
+                    codes=["account_not_connected" if account_status != "connected" else "account_requires_reauth"],
+                )
+            elif not _optional_text(account_row["platform_account_id"]):
+                add_step(
+                    "facebook_account",
+                    "Facebook Page account",
+                    "blocked",
+                    "The connected Facebook account is missing a Page ID.",
+                    action_label="Reconnect Facebook",
+                    href="#connected",
+                    codes=["missing_facebook_page_id"],
+                )
+            elif _looks_like_mock_facebook_account(account_row):
+                add_step(
+                    "facebook_account",
+                    "Facebook Page account",
+                    "blocked",
+                    "This looks like a demo/mock Facebook Page account. Connect a real Facebook Page before posting.",
+                    action_label="Connect real Facebook",
+                    href="#connected",
+                    codes=["mock_facebook_account"],
+                )
+            else:
+                add_step(
+                    "facebook_account",
+                    "Facebook Page account",
+                    "ready",
+                    f"Connected to {account_row['display_name'] or 'Facebook Page'}.",
+                    action_label="Open Connected Accounts",
+                    href="#connected",
+                )
+
+            granted = set(_decode_json(account_row["granted_scopes_json"], []))
+            missing_scopes = sorted(FACEBOOK_REAL_PUBLISH_REQUIRED_SCOPES - granted)
+            if missing_scopes:
+                add_step(
+                    "page_permissions",
+                    "Page permissions",
+                    "blocked",
+                    "Facebook connection is missing required Page permissions: "
+                    + ", ".join(missing_scopes),
+                    action_label="Reconnect Facebook",
+                    href="#connected",
+                    codes=["missing_required_scopes", *missing_scopes],
+                )
+            else:
+                add_step(
+                    "page_permissions",
+                    "Page permissions",
+                    "ready",
+                    "Required Facebook Page posting permissions are present.",
+                    action_label="Open Connected Accounts",
+                    href="#connected",
+                )
+
+            token_step = self._page_token_readiness_step(str(account_row["id"]))
+            add_step(**token_step)
+
+        ready_queue_count = self._ready_facebook_queue_count()
+        if ready_queue_count:
+            add_step(
+                "ready_queue_item",
+                "Ready Facebook post",
+                "ready",
+                f"{ready_queue_count} Facebook queue item(s) are ready for the guarded publish button.",
+                action_label="Open Publish Queue",
+                href="#queue",
+            )
+        else:
+            add_step(
+                "ready_queue_item",
+                "Ready Facebook post",
+                "blocked",
+                "No ready Facebook queue item exists yet. Create content, approve it, schedule it, then run preflight.",
+                action_label="Create or review posts",
+                href="#generate",
+                codes=["no_ready_facebook_queue_item"],
+            )
+
+        add_step(
+            "typed_confirmation",
+            "Final confirmation",
+            "ready",
+            f'The app still requires typing "{FACEBOOK_PUBLISH_CONFIRMATION}" before creating a Facebook Page post.',
+            action_label="Open Publish Queue",
+            href="#queue",
+        )
+
+        deduped_blockers = _dedupe(blocker_codes)
+        deduped_warnings = _dedupe(warning_codes)
+        next_action = next(
+            (
+                {
+                    "label": step["actionLabel"],
+                    "href": step["href"],
+                    "summary": step["summary"],
+                }
+                for step in steps
+                if step["status"] == "blocked"
+            ),
+            {
+                "label": "Open Publish Queue",
+                "href": "#queue",
+                "summary": "A ready Facebook post can use the guarded publish button after typed confirmation.",
+            },
+        )
+        return {
+            "summaryId": "facebook_posting_steps_v1",
+            "ready": not deduped_blockers,
+            "status": "ready" if not deduped_blockers else "blocked",
+            "headline": "Facebook posting setup",
+            "summary": (
+                "Ready to post to Facebook with the guarded local API."
+                if not deduped_blockers
+                else "Facebook posting is not ready yet. Fix the blocked steps below."
+            ),
+            "steps": steps,
+            "blockerCodes": deduped_blockers,
+            "warningCodes": deduped_warnings,
+            "readyQueueItemCount": ready_queue_count,
+            "confirmationPhrase": FACEBOOK_PUBLISH_CONFIRMATION,
+            "nextAction": next_action,
+            "safetyNote": "No autonomous posting. Facebook posting still requires a ready queue item and typed owner confirmation.",
+        }
 
     def _validate_environment(self) -> None:
         settings = load_app_settings(self.database_path)
@@ -286,6 +526,11 @@ class FacebookPublishingService:
             raise FacebookPublishingError(
                 "Facebook Page ID is missing.",
                 ["missing_facebook_page_id"],
+            )
+        if _looks_like_mock_facebook_account(account_row):
+            raise FacebookPublishingError(
+                "Demo/mock Facebook accounts cannot use real publishing.",
+                ["mock_facebook_account"],
             )
         granted = set(_decode_json(account_row["granted_scopes_json"], []))
         missing = sorted(FACEBOOK_REAL_PUBLISH_REQUIRED_SCOPES - granted)
@@ -617,6 +862,119 @@ class FacebookPublishingService:
             raise FacebookPublishingError("Matched Facebook account was not found.", ["facebook_account_not_found"])
         return row
 
+    def _best_facebook_account(self) -> sqlite3.Row | None:
+        with closing(sqlite3.connect(self.database_path)) as connection:
+            connection.row_factory = sqlite3.Row
+            return connection.execute(
+                """
+                SELECT *
+                FROM social_accounts
+                WHERE platform = 'facebook'
+                ORDER BY
+                  CASE connection_status
+                    WHEN 'connected' THEN 0
+                    WHEN 'limited' THEN 1
+                    WHEN 'requires_reauth' THEN 2
+                    WHEN 'expired' THEN 3
+                    WHEN 'revoked' THEN 4
+                    ELSE 5
+                  END,
+                  last_validated_at DESC,
+                  created_at DESC
+                LIMIT 1
+                """
+            ).fetchone()
+
+    def _page_token_readiness_step(self, account_id: str) -> dict[str, Any]:
+        with closing(sqlite3.connect(self.database_path)) as connection:
+            connection.row_factory = sqlite3.Row
+            row = connection.execute(
+                """
+                SELECT id, token_type, encrypted_access_token, access_token_expires_at,
+                       encryption_status, revoked_at
+                FROM platform_tokens
+                WHERE social_account_id = ?
+                  AND platform = 'facebook'
+                  AND revoked_at IS NULL
+                ORDER BY
+                  CASE token_type WHEN 'page_access' THEN 0 ELSE 1 END,
+                  created_at DESC
+                LIMIT 1
+                """,
+                (account_id,),
+            ).fetchone()
+        if row is None:
+            return {
+                "step_id": "page_token",
+                "label": "Server-side Page token",
+                "status": "blocked",
+                "summary": "No server-side Facebook Page token metadata exists.",
+                "action_label": "Reconnect Facebook",
+                "href": "#connected",
+                "codes": ["server_token_unavailable"],
+            }
+        if row["encryption_status"] != "insecure_dev_only":
+            return {
+                "step_id": "page_token",
+                "label": "Server-side Page token",
+                "status": "blocked",
+                "summary": "Token storage is placeholder-only. Reconnect in explicit local development token mode.",
+                "action_label": "Reconnect Facebook",
+                "href": "#connected",
+                "codes": ["server_token_unavailable"],
+            }
+        if os.environ.get("APP_ENV") != "development" or not _truthy(os.environ.get("ALLOW_INSECURE_TOKEN_STORAGE")):
+            return {
+                "step_id": "page_token",
+                "label": "Server-side Page token",
+                "status": "blocked",
+                "summary": "Local development token retrieval is not explicitly enabled.",
+                "action_label": "Open setup wizard",
+                "href": "#setup",
+                "codes": ["insecure_token_mode_blocked"],
+            }
+        if is_token_expired(row["access_token_expires_at"]):
+            return {
+                "step_id": "page_token",
+                "label": "Server-side Page token",
+                "status": "blocked",
+                "summary": "The stored Facebook Page token is expired.",
+                "action_label": "Reconnect Facebook",
+                "href": "#connected",
+                "codes": ["token_expired"],
+            }
+        if not _optional_text(row["encrypted_access_token"]):
+            return {
+                "step_id": "page_token",
+                "label": "Server-side Page token",
+                "status": "blocked",
+                "summary": "The Facebook Page token value is unavailable server-side.",
+                "action_label": "Reconnect Facebook",
+                "href": "#connected",
+                "codes": ["server_token_unavailable"],
+            }
+        return {
+            "step_id": "page_token",
+            "label": "Server-side Page token",
+            "status": "ready",
+            "summary": "A local development Page token is available server-side. Token value is hidden.",
+            "action_label": "Open Connected Accounts",
+            "href": "#connected",
+        }
+
+    def _ready_facebook_queue_count(self) -> int:
+        with closing(sqlite3.connect(self.database_path)) as connection:
+            row = connection.execute(
+                """
+                SELECT COUNT(*)
+                FROM publish_queue_items
+                WHERE platform = 'facebook'
+                  AND queue_status = 'ready'
+                  AND preflight_status IN ('passed', 'warnings')
+                """
+            ).fetchone()
+        return int(row[0] if row else 0)
+
 
 def _truthy(value: str | None) -> bool:
     return bool(value and value.strip().lower() in {"1", "true", "yes", "on"})
@@ -642,6 +1000,26 @@ def _decode_json(raw_value: str | None, fallback: Any) -> Any:
 
 def _optional_text(value: Any) -> str | None:
     return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _dedupe(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        if value not in seen:
+            seen.add(value)
+            result.append(value)
+    return result
+
+
+def _looks_like_mock_facebook_account(account_row: sqlite3.Row) -> bool:
+    values = [
+        account_row["id"],
+        account_row["platform_account_id"],
+        account_row["display_name"],
+    ]
+    normalized = " ".join(str(value or "").lower() for value in values)
+    return "mock" in normalized or "demo" in normalized
 
 
 def _resolve_local_path(path_value: str | None) -> Path:

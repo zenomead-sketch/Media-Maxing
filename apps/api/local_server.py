@@ -4,6 +4,7 @@ import argparse
 import json
 import mimetypes
 import os
+import re
 import sqlite3
 import uuid
 from contextlib import closing
@@ -58,6 +59,7 @@ from scripts.services.facebook_publishing import FacebookPublishingService
 from scripts.services.integration_setup import validate_social_integration_setup
 from scripts.services.local_env import load_local_env_file
 from scripts.services.manual_export import ManualExportService
+from scripts.services.meta_analytics import MetaAnalyticsError, MetaAnalyticsService
 from scripts.services.oauth_flow import OAuthFlowService
 from scripts.services.onboarding import OnboardingService
 from scripts.services.publish_queue import PublishQueueService
@@ -105,6 +107,7 @@ class LocalApiApplication:
 
     def __init__(self, database_path: str | Path | None = None):
         self.database_path = initialize_database(resolve_database_path(database_path))
+        self._facebook_publish_nonces: set[str] = set()
 
     def dispatch(
         self,
@@ -150,6 +153,8 @@ class LocalApiApplication:
             return self._bootstrap()
         if segments == ["api", "integration-setup"] and method == "GET":
             return validate_social_integration_setup().to_dict()
+        if segments == ["api", "facebook-publishing", "readiness"] and method == "GET":
+            return self._facebook_publishing_readiness()
         if segments == ["api", "diagnostics"]:
             diagnostics = DiagnosticsService(self.database_path)
             if method == "GET":
@@ -363,6 +368,7 @@ class LocalApiApplication:
                     copy_media=bool(body.get("copy_media", False)),
                 )
             if action == "publish-facebook":
+                self._consume_facebook_publish_nonce(body)
                 return FacebookPublishingService(self.database_path).publish_queue_item(
                     queue_item_id,
                     confirmation_phrase=body.get("confirmationPhrase")
@@ -386,6 +392,23 @@ class LocalApiApplication:
                 snapshot_date=body.get("snapshot_date"),
                 explicitly_requested=bool(body.get("explicitly_requested", False)),
             )
+        if segments == ["api", "analytics", "meta-sync"] and method == "POST":
+            try:
+                try:
+                    limit = int(body.get("limit") or 25)
+                except (TypeError, ValueError) as error:
+                    raise LocalApiError(
+                        "Meta analytics sync limit must be a number.",
+                        error_codes=["invalid_meta_analytics_limit"],
+                    ) from error
+                return MetaAnalyticsService(self.database_path).sync(
+                    platforms=_string_list(body.get("platforms")),
+                    brand_profile_id=body.get("brand_profile_id")
+                    or body.get("brandProfileId"),
+                    limit=limit,
+                )
+            except MetaAnalyticsError as error:
+                raise LocalApiError(str(error), error_codes=error.error_codes) from error
         if (
             len(segments) == 4
             and segments[:3] == ["api", "analytics", "insights"]
@@ -641,6 +664,24 @@ class LocalApiApplication:
             )
         return {"id": engagement_item_id, "status": status, "localOnly": True}
 
+    def _facebook_publishing_readiness(self) -> dict[str, Any]:
+        summary = FacebookPublishingService(self.database_path).get_readiness_summary()
+        nonce = uuid.uuid4().hex
+        self._facebook_publish_nonces.add(nonce)
+        summary["publishNonce"] = nonce
+        summary["publishNonceRequired"] = True
+        return summary
+
+    def _consume_facebook_publish_nonce(self, body: dict[str, Any]) -> None:
+        nonce = str(body.get("publishNonce") or body.get("publish_nonce") or "").strip()
+        if not nonce or nonce not in self._facebook_publish_nonces:
+            raise LocalApiError(
+                "Refresh Facebook posting readiness before publishing.",
+                status=HTTPStatus.FORBIDDEN,
+                error_codes=["facebook_publish_nonce_required"],
+            )
+        self._facebook_publish_nonces.remove(nonce)
+
     def _bootstrap(self) -> dict[str, Any]:
         brands = list_brand_profiles(self.database_path)
         onboarding = OnboardingService(self.database_path).get_state()
@@ -842,7 +883,7 @@ class LocalApiRequestHandler(BaseHTTPRequestHandler):
         self._handle_api("PATCH")
 
     def log_message(self, format_string: str, *args: Any) -> None:
-        print(f"local-api: {self.address_string()} {format_string % args}")
+        print(f"local-api: {self.address_string()} {_redact_local_api_log(format_string % args)}")
 
     def _handle_api(self, method: str) -> None:
         try:
@@ -1254,6 +1295,17 @@ def _normalize_origin(origin: str) -> str | None:
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         return None
     return f"{parsed.scheme}://{parsed.netloc.lower()}"
+
+
+_LOCAL_API_LOG_SECRET_PATTERN = re.compile(
+    r"(?i)([?&; ](?:code|state|access_token|refresh_token|id_token|client_secret|"
+    r"authorization|appsecret_proof|signed_request|bearer)=)([^&;\"' ]+)"
+)
+
+
+def _redact_local_api_log(message: str) -> str:
+    """Redact OAuth and token-like values before request lines reach stdout."""
+    return _LOCAL_API_LOG_SECRET_PATTERN.sub(r"\1[REDACTED]", message)
 
 
 def _camelize_keys(value: Any) -> Any:

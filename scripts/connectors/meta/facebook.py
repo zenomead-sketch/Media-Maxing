@@ -21,6 +21,9 @@ from scripts.services.platform_http_client import (
 )
 
 
+GUARDED_FACEBOOK_PUBLISH_CONTEXT = "facebook_publishing_service_v1"
+
+
 class FacebookConnector(MetaConnector):
     def __init__(self) -> None:
         super().__init__(
@@ -88,6 +91,22 @@ class FacebookConnector(MetaConnector):
         page_id = _optional_payload_text(payload, "pageId")
         message = _optional_payload_text(payload, "message")
         page_token = _optional_payload_text(payload, "pageAccessToken")
+        guarded_context = _optional_payload_text(payload, "guardedServiceContext")
+        if guarded_context != GUARDED_FACEBOOK_PUBLISH_CONTEXT:
+            return ConnectorActionResult(
+                success=False,
+                status="disabled_by_policy",
+                message=(
+                    "Direct Facebook text publishing is disabled by policy. Use the guarded "
+                    "FacebookPublishingService so confirmation, preflight, emergency pause, "
+                    "and token checks run first."
+                ),
+                metadata={
+                    "platform": "facebook",
+                    "realPublishingEnabled": False,
+                    "reason": "missing_guarded_service_context",
+                },
+            )
         if not page_id or not message or not page_token:
             return ConnectorActionResult(
                 success=False,
@@ -173,6 +192,22 @@ class FacebookConnector(MetaConnector):
         filename = _optional_payload_text(payload, "filename") or "facebook-photo.jpg"
         content_type = _optional_payload_text(payload, "contentType") or "image/jpeg"
         image_bytes = payload.get("imageBytes")
+        guarded_context = _optional_payload_text(payload, "guardedServiceContext")
+        if guarded_context != GUARDED_FACEBOOK_PUBLISH_CONTEXT:
+            return ConnectorActionResult(
+                success=False,
+                status="disabled_by_policy",
+                message=(
+                    "Direct Facebook image publishing is disabled by policy. Use the guarded "
+                    "FacebookPublishingService so confirmation, preflight, emergency pause, "
+                    "and token/media checks run first."
+                ),
+                metadata={
+                    "platform": "facebook",
+                    "realPublishingEnabled": False,
+                    "reason": "missing_guarded_service_context",
+                },
+            )
         if not page_id or not page_token or not isinstance(image_bytes, bytes) or not image_bytes:
             return ConnectorActionResult(
                 success=False,

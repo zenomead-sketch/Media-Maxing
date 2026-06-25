@@ -2,7 +2,7 @@
 
 This document describes the current Meta connector scaffold for Facebook, Instagram, and Threads.
 
-The scaffold is not a real publishing integration yet. It does not publish, fetch comments, fetch analytics, or call Meta APIs by default. A guarded short-lived OAuth token exchange path now exists for future manual testing, but it is blocked unless explicit real OAuth and network flags are enabled.
+The Meta layer is safe by default. It does not fetch comments, send replies, fetch broad analytics, or call Meta APIs unless explicit flags are enabled. A guarded OAuth and Facebook Page discovery path exists for local testing, and a narrow Facebook Page text or single-image posting path exists through Publish Queue. Instagram, Threads, broad Meta publishing, and autonomous posting remain disabled.
 
 ## Connector Modules
 
@@ -56,7 +56,7 @@ Real OAuth token exchange is setup-gated:
 
 If any requirement is missing, no network call is made and the callback returns a safe setup/disabled result.
 
-When all gates pass, `OAuthFlowService` builds a real Meta authorization URL during start, stores only a hash of the OAuth state, and later builds a Meta token request through `scripts/connectors/meta/oauth.py`. Token exchange goes through `scripts/services/platform_http_client.py`. Tests use mocked HTTP responses only.
+When all gates pass, `OAuthFlowService` builds a real Meta authorization URL during start, stores only a hash of the OAuth state, and later builds the documented Meta `GET /oauth/access_token` request through `scripts/connectors/meta/oauth.py`. Token exchange goes through `scripts/services/platform_http_client.py`. Tests use mocked HTTP responses only.
 
 ## Token And Account Behavior
 
@@ -70,13 +70,23 @@ TOKEN_STORAGE_MODE=placeholder_not_stored
 
 raw token values are refused and are not stored. The app stores placeholder token metadata only, with null token blob fields.
 
-Because account discovery is not implemented yet, a successful token exchange creates a limited local account:
+With placeholder storage, a successful token exchange creates or keeps a limited local account:
 
 - `connectionStatus=limited`
-- `platformAccountId` uses an unknown local placeholder
+- `platformAccountId` may use an unknown local placeholder or discovered Page ID
 - `requiresReauth=true`
 - safe frontend DTO only
-- warning that account discovery is not implemented
+- warning that token storage is not publish-ready
+
+For Facebook only, explicit local development token storage can now run Page discovery through `/me/accounts`, store a Page token through `TokenSecurityService`, and promote the account to:
+
+- `connectionStatus=connected`
+- `accountType=page`
+- real Page ID as `platformAccountId`
+- `requiresReauth=false`
+- safe frontend DTO only
+
+This path still requires `APP_ENV=development`, `TOKEN_STORAGE_MODE=insecure_dev_only`, and `ALLOW_INSECURE_TOKEN_STORAGE=true`. It is for local personal testing only until keychain or encrypted storage exists.
 
 Long-lived token exchange is not implemented yet. That future step must verify current Meta docs, token lifetimes, app review requirements, and secure token storage first.
 
@@ -87,7 +97,7 @@ Meta connectors now expose:
 - `getAccountProfile()`
 - `validateConnection()`
 
-The current discovery path is a safe scaffold. Facebook discovery is shaped for Page discovery through `/me/accounts` and can read a mocked response containing Page IDs, names, usernames, categories, tasks, and Page access tokens. Page access tokens are redacted and are not exposed to the UI. Tests inject mocked provider responses through the server-only platform HTTP client. Real discovery is not called by default.
+The current discovery path is a safe scaffold. Facebook discovery is shaped for Page discovery through `/me/accounts` and can read a mocked response containing Page IDs, names, usernames, categories, tasks, and Page access tokens. Page access tokens are redacted and are not exposed to the UI. Tests inject mocked provider responses through the server-only platform HTTP client. Real discovery is not called by default; it requires real OAuth/network flags and server-side execution.
 
 Health checks can return:
 
@@ -102,9 +112,9 @@ Health checks update `last_validated_at`, store safe connector health rows, and 
 
 ## Publishing Behavior
 
-Publishing is disabled by policy.
+Broad Meta publishing is disabled by policy.
 
-`META_ENABLE_REAL_PUBLISHING=true` does not enable publishing in this batch. Meta connector publishing methods return `disabled_by_policy` and report `realPublishingEnabled=false`.
+`META_ENABLE_REAL_PUBLISHING=true` does not enable generic connector publishing. Meta connector publishing methods return `disabled_by_policy` and report `realPublishingEnabled=false`. The current exception is the separate guarded Facebook Page text or single-image Publish Queue service.
 
 Real publishing requires a future explicit platform task with:
 
@@ -132,7 +142,7 @@ Each connector exposes setup instructions for:
 - local development notes
 - publishing-disabled safety notice
 
-Current Facebook connection scopes are `pages_show_list`, `pages_manage_metadata`, and `pages_read_engagement`. Future real Page publishing will also need `pages_manage_posts`, but that scope should not be treated as permission to publish until a future explicit real-publishing task implements the final safety gates.
+Current Facebook connection scopes for the guarded Page path are `pages_show_list`, `pages_manage_metadata`, `pages_read_engagement`, and `pages_manage_posts`. These scopes only make the server-side Facebook Page connection usable; they do not allow broad or automatic publishing. The guarded Publish Queue action still requires preflight, emergency pause off, a connected Page token, explicit real-publishing flags, and typed confirmation.
 
 ## Practical Setup Checklist
 
